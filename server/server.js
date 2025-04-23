@@ -9,6 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import userRoutes from './routes/userRoutes.js';
+import tournamentRoutes from './routes/tournamentRoutes.js';
 
 // ES Modules __dirname workaround
 const __filename = fileURLToPath(import.meta.url);
@@ -36,6 +37,8 @@ import tableRoutes from './routes/tableRoutes.js';
 app.use('/api/auth', authRoutes);
 app.use('/api/table', tableRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/tournaments', tournamentRoutes);
+
 
 // ✅ MongoDB connection
 mongoose.connect(process.env.MONGO_URI, {
