@@ -114,7 +114,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // Find user
     const [result] = await pool.execute(
-      'SELECT id, email, username, full_name, password_hash, profile_image, state, country, created_at FROM users WHERE email = ?',
+      `SELECT id, email, username, full_name, password_hash, profile_image, avatar_url, bio, 
+              city, state, country, timezone, favorite_poker_variant, experience_level, 
+              total_games_played, total_winnings, preferred_table_stakes, privacy_level, created_at 
+       FROM users WHERE email = ?`,
       [email]
     );
 
@@ -149,8 +152,18 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         username: user.username,
         fullName: user.full_name,
         profileImage: user.profile_image,
+        avatarUrl: user.avatar_url,
+        bio: user.bio,
+        city: user.city,
         state: user.state,
         country: user.country,
+        timezone: user.timezone,
+        favoritePokerVariant: user.favorite_poker_variant,
+        experienceLevel: user.experience_level,
+        totalGamesPlayed: user.total_games_played,
+        totalWinnings: user.total_winnings,
+        preferredTableStakes: user.preferred_table_stakes,
+        privacyLevel: user.privacy_level,
         createdAt: user.created_at
       }
     });
@@ -187,7 +200,10 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
     const userId = (req as any).user.userId;
 
     const [result] = await pool.execute(
-      'SELECT id, email, username, full_name, profile_image, state, country, created_at FROM users WHERE id = ?',
+      `SELECT id, email, username, full_name, profile_image, avatar_url, bio, 
+              city, state, country, timezone, favorite_poker_variant, experience_level, 
+              total_games_played, total_winnings, preferred_table_stakes, privacy_level, created_at 
+       FROM users WHERE id = ?`,
       [userId]
     );
 
@@ -205,8 +221,18 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
         username: user.username,
         fullName: user.full_name,
         profileImage: user.profile_image,
+        avatarUrl: user.avatar_url,
+        bio: user.bio,
+        city: user.city,
         state: user.state,
         country: user.country,
+        timezone: user.timezone,
+        favoritePokerVariant: user.favorite_poker_variant,
+        experienceLevel: user.experience_level,
+        totalGamesPlayed: user.total_games_played,
+        totalWinnings: user.total_winnings,
+        preferredTableStakes: user.preferred_table_stakes,
+        privacyLevel: user.privacy_level,
         createdAt: user.created_at
       }
     });
@@ -214,5 +240,131 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
   } catch (error) {
     console.error('Get profile error:', error);
     res.status(500).json({ message: 'Server error fetching profile' });
+  }
+};
+
+// Update user profile
+export const updateProfile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user.userId;
+    const {
+      fullName,
+      bio,
+      city,
+      state,
+      country,
+      timezone,
+      favoritePokerVariant,
+      experienceLevel,
+      preferredTableStakes,
+      privacyLevel,
+      profileImage,
+      avatarUrl
+    } = req.body;
+
+    // Build dynamic update query
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (fullName !== undefined) {
+      updates.push('full_name = ?');
+      values.push(fullName);
+    }
+    if (bio !== undefined) {
+      updates.push('bio = ?');
+      values.push(bio);
+    }
+    if (city !== undefined) {
+      updates.push('city = ?');
+      values.push(city);
+    }
+    if (state !== undefined) {
+      updates.push('state = ?');
+      values.push(state);
+    }
+    if (country !== undefined) {
+      updates.push('country = ?');
+      values.push(country);
+    }
+    if (timezone !== undefined) {
+      updates.push('timezone = ?');
+      values.push(timezone);
+    }
+    if (favoritePokerVariant !== undefined) {
+      updates.push('favorite_poker_variant = ?');
+      values.push(favoritePokerVariant);
+    }
+    if (experienceLevel !== undefined) {
+      updates.push('experience_level = ?');
+      values.push(experienceLevel);
+    }
+    if (preferredTableStakes !== undefined) {
+      updates.push('preferred_table_stakes = ?');
+      values.push(preferredTableStakes);
+    }
+    if (privacyLevel !== undefined) {
+      updates.push('privacy_level = ?');
+      values.push(privacyLevel);
+    }
+    if (profileImage !== undefined) {
+      updates.push('profile_image = ?');
+      values.push(profileImage);
+    }
+    if (avatarUrl !== undefined) {
+      updates.push('avatar_url = ?');
+      values.push(avatarUrl);
+    }
+
+    if (updates.length === 0) {
+      res.status(400).json({ message: 'No fields to update' });
+      return;
+    }
+
+    // Add updated_at and userId
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(userId);
+
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
+    
+    await pool.execute(query, values);
+
+    // Fetch updated user data
+    const [result] = await pool.execute(
+      `SELECT id, email, username, full_name, profile_image, avatar_url, bio, 
+              city, state, country, timezone, favorite_poker_variant, experience_level, 
+              total_games_played, total_winnings, preferred_table_stakes, privacy_level, created_at 
+       FROM users WHERE id = ?`,
+      [userId]
+    );
+
+    const user = (result as any[])[0];
+
+    res.json({
+      message: 'Profile updated successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        fullName: user.full_name,
+        profileImage: user.profile_image,
+        avatarUrl: user.avatar_url,
+        bio: user.bio,
+        city: user.city,
+        state: user.state,
+        country: user.country,
+        timezone: user.timezone,
+        favoritePokerVariant: user.favorite_poker_variant,
+        experienceLevel: user.experience_level,
+        totalGamesPlayed: user.total_games_played,
+        totalWinnings: user.total_winnings,
+        preferredTableStakes: user.preferred_table_stakes,
+        privacyLevel: user.privacy_level,
+        createdAt: user.created_at
+      }
+    });
+
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ message: 'Server error updating profile' });
   }
 };

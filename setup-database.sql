@@ -1,10 +1,9 @@
--- Create database schema for poker app (MySQL)
+-- Drop and recreate database to ensure clean setup
+DROP DATABASE IF EXISTS poker_app;
+CREATE DATABASE poker_app;
+USE poker_app;
 
--- Create database (uncomment if needed)
--- CREATE DATABASE poker_app;
--- USE poker_app;
-
--- Users table
+-- Users table with all required fields
 CREATE TABLE users (
     id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -18,7 +17,7 @@ CREATE TABLE users (
     state VARCHAR(100),
     country VARCHAR(100),
     timezone VARCHAR(50),
-    favorite_poker_variant VARCHAR(50) DEFAULT 'Texas Hold\'em',
+    favorite_poker_variant VARCHAR(50) DEFAULT 'Texas Hold''em',
     experience_level ENUM('Beginner', 'Intermediate', 'Advanced', 'Professional') DEFAULT 'Beginner',
     total_games_played INTEGER DEFAULT 0,
     total_winnings INTEGER DEFAULT 0,

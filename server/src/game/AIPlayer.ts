@@ -116,17 +116,21 @@ export class AIPlayer {
     availableChips: number,
     handStrength: number
   ): number {
-    // Base raise size
-    let raiseSize = Math.max(bigBlind * 2, pot * 0.5);
+    // Base raise size (minimum 2x big blind)
+    let raiseSize = Math.max(bigBlind * 2, Math.floor(pot * 0.5));
     
     // Adjust based on hand strength
     if (handStrength > 0.9) {
-      raiseSize = Math.min(pot * 1.5, availableChips * 0.3); // Big raise with monster hands
+      raiseSize = Math.min(Math.floor(pot * 1.5), Math.floor(availableChips * 0.3)); // Big raise with monster hands
     } else if (handStrength > 0.7) {
-      raiseSize = Math.min(pot * 0.75, availableChips * 0.2); // Medium raise
+      raiseSize = Math.min(Math.floor(pot * 0.75), Math.floor(availableChips * 0.2)); // Medium raise
     }
     
-    // Ensure we don't raise more than we have
+    // Ensure the raise amount is:
+    // 1. At least the big blind
+    // 2. A whole number
+    // 3. Not more than available chips
+    raiseSize = Math.max(bigBlind, Math.floor(raiseSize));
     return Math.min(raiseSize, availableChips);
   }
 

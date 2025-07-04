@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { io, Socket } from 'socket.io-client';
+import UserProfile from './UserProfile';
 import './PokerTable.css';
 
 // Simplified types for client-side
@@ -36,6 +37,12 @@ interface PokerTable {
   currentPlayerPosition: number;
   gamePhase: 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
   isTrainingMode: boolean;
+  lastWinner?: {
+    playerId: string;
+    username: string;
+    winnings: number;
+    handDescription?: string;
+  };
 }
 
 const LivePokerTable: React.FC = () => {
@@ -44,6 +51,7 @@ const LivePokerTable: React.FC = () => {
   const [tableState, setTableState] = useState<PokerTable | null>(null);
   const [connected, setConnected] = useState(false);
   const [raiseAmount, setRaiseAmount] = useState('');
+  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -123,6 +131,93 @@ const LivePokerTable: React.FC = () => {
     return card.suit === 'hearts' || card.suit === 'diamonds' ? 'red' : 'black';
   };
 
+  // Poker chip rendering function
+  const renderPokerChips = (amount: number): React.ReactElement[] => {
+    const chips: React.ReactElement[] = [];
+    let remaining = amount;
+    
+    // Chip denominations and colors
+    const chipTypes = [
+      { value: 100, color: 'black', label: '100' },
+      { value: 25, color: 'green', label: '25' },
+      { value: 5, color: 'red', label: '5' },
+      { value: 1, color: 'white', label: '1' }
+    ];
+    
+    chipTypes.forEach(chipType => {
+      const count = Math.floor(remaining / chipType.value);
+      if (count > 0) {
+        // Stack chips (max 5 visible per stack)
+        const stacks = Math.ceil(count / 5);
+        for (let stack = 0; stack < stacks; stack++) {
+          const stackCount = Math.min(5, count - (stack * 5));
+          chips.push(
+            <div key={`${chipType.value}-${stack}`} className={`poker-chip ${chipType.color}`}>
+              <div className="chip-value">{chipType.label}</div>
+              {stackCount > 1 && <div className="chip-count">×{stackCount}</div>}
+            </div>
+          );
+        }
+        remaining -= count * chipType.value;
+      }
+    });
+    
+    return chips;
+  };
+
+  // Helper functions for blinds
+  const isSmallBlind = (seatIndex: number): boolean => {
+    if (!tableState) return false;
+    const smallBlindPos = getSmallBlindPosition();
+    return smallBlindPos === seatIndex;
+  };
+
+  const isBigBlind = (seatIndex: number): boolean => {
+    if (!tableState) return false;
+    const bigBlindPos = getBigBlindPosition();
+    return bigBlindPos === seatIndex;
+  };
+
+  const getSmallBlindPosition = (): number => {
+    if (!tableState) return -1;
+    const activePlayers = tableState.players.filter(p => p.isActive);
+    if (activePlayers.length === 2) {
+      return tableState.dealerPosition; // Heads-up: dealer is small blind
+    }
+    // Find next active player after dealer
+    let pos = (tableState.dealerPosition + 1) % 6;
+    while (pos !== tableState.dealerPosition) {
+      const player = tableState.players.find(p => p.position === pos);
+      if (player && player.isActive) return pos;
+      pos = (pos + 1) % 6;
+    }
+    return -1;
+  };
+
+  const getBigBlindPosition = (): number => {
+    if (!tableState) return -1;
+    const activePlayers = tableState.players.filter(p => p.isActive);
+    if (activePlayers.length === 2) {
+      // Heads-up: non-dealer is big blind
+      let pos = (tableState.dealerPosition + 1) % 6;
+      while (pos !== tableState.dealerPosition) {
+        const player = tableState.players.find(p => p.position === pos);
+        if (player && player.isActive) return pos;
+        pos = (pos + 1) % 6;
+      }
+    }
+    // Find next active player after small blind
+    const sbPos = getSmallBlindPosition();
+    if (sbPos === -1) return -1;
+    let pos = (sbPos + 1) % 6;
+    while (pos !== sbPos) {
+      const player = tableState.players.find(p => p.position === pos);
+      if (player && player.isActive) return pos;
+      pos = (pos + 1) % 6;
+    }
+    return -1;
+  };
+
   if (!connected || !tableState) {
     return (
       <div className="poker-table-container">
@@ -187,13 +282,20 @@ const LivePokerTable: React.FC = () => {
     <div className="poker-table-container">
       <div className="header">
         <div className="user-info">
-          <span>Welcome, {user?.fullName} (@{user?.username})</span>
-          <span className="connection-status">
-            {connected ? '🟢 Connected' : '🔴 Disconnected'}
-          </span>
-          <button onClick={logout} className="logout-button">
-            Logout
-          </button>
+          <div className="user-welcome">
+            <span>Welcome, {user?.fullName} (@{user?.username})</span>
+            <span className="connection-status">
+              {connected ? '🟢 Connected' : '🔴 Disconnected'}
+            </span>
+          </div>
+          <div className="header-buttons">
+            <button onClick={() => setShowProfile(true)} className="profile-button">
+              👤 Profile
+            </button>
+            <button onClick={logout} className="logout-button">
+              Logout
+            </button>
+          </div>
         </div>
       </div>
 
@@ -234,8 +336,21 @@ const LivePokerTable: React.FC = () => {
                         <div className="player-chips">${player.chips}</div>
                       </div>
                       
+                      {/* Bet chips */}
                       {player.currentBet > 0 && (
-                        <div className="player-bet">Bet: ${player.currentBet}</div>
+                        <div className="bet-chips">
+                          <div className="chips-container">
+                            {renderPokerChips(player.currentBet)}
+                          </div>
+                          <div className="bet-amount">${player.currentBet}</div>
+                          {/* Show blind indicators */}
+                          {isSmallBlind(seatIndex) && (
+                            <div className="blind-indicator sb">SB</div>
+                          )}
+                          {isBigBlind(seatIndex) && (
+                            <div className="blind-indicator bb">BB</div>
+                          )}
+                        </div>
                       )}
                       
                       {player.isFolded && <div className="player-status folded">FOLDED</div>}
@@ -299,13 +414,57 @@ const LivePokerTable: React.FC = () => {
                 )}
                 
                 <div className="raise-section">
+                  {/* Quick bet buttons */}
+                  <div className="quick-bet-buttons">
+                    <button 
+                      onClick={() => setRaiseAmount((tableState.currentBet + tableState.bigBlind).toString())}
+                      className="quick-bet-btn"
+                      title="Minimum raise"
+                    >
+                      Min
+                    </button>
+                    <button 
+                      onClick={() => setRaiseAmount((tableState.currentBet + tableState.bigBlind * 2).toString())}
+                      className="quick-bet-btn"
+                      title="2x big blind raise"
+                    >
+                      2x
+                    </button>
+                    <button 
+                      onClick={() => setRaiseAmount((Math.floor(tableState.pot * 0.5) + tableState.currentBet).toString())}
+                      className="quick-bet-btn"
+                      title="Half pot"
+                    >
+                      1/2 Pot
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const callAmount = tableState.currentBet - (myPlayer?.currentBet || 0);
+                        const potBet = tableState.pot + callAmount;
+                        setRaiseAmount(potBet.toString());
+                      }}
+                      className="quick-bet-btn"
+                      title="Pot size bet"
+                    >
+                      Pot
+                    </button>
+                  </div>
+                  
                   <input
                     type="number"
                     value={raiseAmount}
-                    onChange={(e) => setRaiseAmount(e.target.value)}
-                    placeholder="Raise amount"
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value) || 0;
+                      // Ensure whole numbers only and minimum big blind raise
+                      const minRaise = tableState.currentBet + tableState.bigBlind;
+                      if (value >= minRaise || e.target.value === '') {
+                        setRaiseAmount(e.target.value);
+                      }
+                    }}
+                    placeholder={`Min: $${tableState.currentBet + tableState.bigBlind}`}
                     min={tableState.currentBet + tableState.bigBlind}
                     max={myPlayer.chips + myPlayer.currentBet}
+                    step={tableState.smallBlind}
                   />
                   <button 
                     onClick={() => handleAction('raise', parseInt(raiseAmount) || 0)}
@@ -319,9 +478,26 @@ const LivePokerTable: React.FC = () => {
             </div>
           )}
 
+          {/* Winner Display */}
+          {tableState.lastWinner && (
+            <div className="winner-display">
+              <div className="winner-announcement">
+                🎉 <strong>{tableState.lastWinner.username}</strong> wins ${tableState.lastWinner.winnings}! 🎉
+              </div>
+              {tableState.lastWinner.handDescription && (
+                <div className="winner-hand">
+                  with {tableState.lastWinner.handDescription}
+                </div>
+              )}
+              <div className="winner-subtitle">
+                Next hand starting soon...
+              </div>
+            </div>
+          )}
+
           {/* Game Status */}
           <div className="game-status">
-            {currentPlayer && (
+            {!tableState.lastWinner && currentPlayer && (
               <div>
                 Waiting for {currentPlayer.username} to act...
                 {currentPlayer.isAI && ' 🤖 thinking...'}
@@ -330,6 +506,11 @@ const LivePokerTable: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      <UserProfile 
+        isOpen={showProfile} 
+        onClose={() => setShowProfile(false)} 
+      />
     </div>
   );
 };
