@@ -305,10 +305,26 @@ const LivePokerTable: React.FC = () => {
           <h2>Live Poker Table</h2>
           <p>Phase: {tableState.gamePhase.toUpperCase()}</p>
           
+          {/* Deck Position */}
+          <div className="deck-position">
+            <div className="deck-stack">
+              <div className="deck-card"></div>
+              <div className="deck-card"></div>
+              <div className="deck-card"></div>
+              <div className="deck-card"></div>
+              <div className="deck-card"></div>
+            </div>
+            <div style={{marginTop: '6px', fontSize: '0.6rem', textAlign: 'center'}}>🂠 DECK</div>
+          </div>
+
           {/* Community Cards */}
           <div className="community-cards">
             {tableState.communityCards.map((card, index) => (
-              <div key={index} className={`card ${getCardColor(card)}`}>
+              <div 
+                key={index} 
+                className={`card ${getCardColor(card)} community-card-appear`}
+                style={{animationDelay: `${index * 0.2}s`}}
+              >
                 {formatCard(card)}
               </div>
             ))}
@@ -358,9 +374,13 @@ const LivePokerTable: React.FC = () => {
                       
                       {/* Show hole cards */}
                       {player.holeCards.length > 0 && (
-                        <div className="hole-cards">
+                        <div className={`hole-cards ${isCurrentPlayer ? 'current-player' : ''}`}>
                           {player.holeCards.map((card, cardIndex) => (
-                            <div key={cardIndex} className={`card small ${getCardColor(card)}`}>
+                            <div 
+                              key={cardIndex} 
+                              className={`card small ${getCardColor(card)} hole-card-appear`}
+                              style={{animationDelay: `${cardIndex * 0.1}s`}}
+                            >
                               {formatCard(card)}
                             </div>
                           ))}
