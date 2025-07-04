@@ -5,8 +5,18 @@ export interface User {
   username: string;
   fullName: string;
   profileImage?: string;
+  avatarUrl?: string;
+  bio?: string;
+  city?: string;
   state?: string;
   country?: string;
+  timezone?: string;
+  favoritePokerVariant?: string;
+  experienceLevel?: 'Beginner' | 'Intermediate' | 'Advanced' | 'Professional';
+  totalGamesPlayed?: number;
+  totalWinnings?: number;
+  preferredTableStakes?: string;
+  privacyLevel?: 'Public' | 'Friends' | 'Private';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,6 +36,21 @@ export interface UserLogin {
 export interface AuthResponse {
   token: string;
   user: Omit<User, 'password'>;
+}
+
+export interface ProfileUpdate {
+  fullName?: string;
+  bio?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  timezone?: string;
+  favoritePokerVariant?: string;
+  experienceLevel?: 'Beginner' | 'Intermediate' | 'Advanced' | 'Professional';
+  preferredTableStakes?: string;
+  privacyLevel?: 'Public' | 'Friends' | 'Private';
+  profileImage?: string;
+  avatarUrl?: string;
 }
 
 // Poker Game Types
@@ -61,6 +86,12 @@ export interface PokerTable {
   currentPlayerPosition: number;
   gamePhase: 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
   isTrainingMode: boolean;
+  lastWinner?: {
+    playerId: string;
+    username: string;
+    winnings: number;
+    handDescription?: string;
+  };
 }
 
 // Socket Events

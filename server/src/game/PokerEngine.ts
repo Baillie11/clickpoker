@@ -83,16 +83,147 @@ export class PokerEngine {
   }
 
   static getHandStrength(holeCards: Card[], communityCards: Card[]): number {
-    // Simple hand strength calculation (0-1, higher is better)
-    // This is a simplified version - a full implementation would evaluate poker hands
+    const handRank = this.evaluateHand(holeCards, communityCards);
+    return handRank.rank + (handRank.tiebreaker / 1000000); // Convert to 0-1 scale with tiebreakers
+  }
+
+  static evaluateHand(holeCards: Card[], communityCards: Card[]): { rank: number, tiebreaker: number, description: string } {
     const allCards = [...holeCards, ...communityCards];
     
-    if (allCards.length < 2) return Math.random() * 0.3; // Pre-flop random
-    if (allCards.length < 5) return Math.random() * 0.6; // Flop/Turn
+    if (allCards.length < 5) {
+      // Pre-flop or incomplete board - use high card value
+      const highCard = this.getHighCardValue(holeCards);
+      return { rank: 0, tiebreaker: highCard * 14, description: 'High Card' };
+    }
+
+    // Get all possible 5-card combinations from 7 cards
+    const combinations = this.getCombinations(allCards, 5);
+    let bestHand = { rank: 0, tiebreaker: 0, description: 'High Card' };
+
+    for (const combo of combinations) {
+      const handRank = this.evaluateFiveCardHand(combo);
+      if (handRank.rank > bestHand.rank || 
+          (handRank.rank === bestHand.rank && handRank.tiebreaker > bestHand.tiebreaker)) {
+        bestHand = handRank;
+      }
+    }
+
+    return bestHand;
+  }
+
+  private static evaluateFiveCardHand(cards: Card[]): { rank: number, tiebreaker: number, description: string } {
+    const ranks = cards.map(card => this.getCardRankValue(card.rank)).sort((a, b) => b - a);
+    const suits = cards.map(card => card.suit);
+    const rankCounts = this.getRankCounts(ranks);
+    const isFlush = suits.every(suit => suit === suits[0]);
+    const isStraight = this.isStraight(ranks);
+
+    // Royal Flush
+    if (isFlush && isStraight && ranks[0] === 14) {
+      return { rank: 9, tiebreaker: 0, description: 'Royal Flush' };
+    }
+
+    // Straight Flush
+    if (isFlush && isStraight) {
+      return { rank: 8, tiebreaker: ranks[0], description: 'Straight Flush' };
+    }
+
+    // Four of a Kind
+    if (rankCounts.some(count => count === 4)) {
+      const fourKind = ranks.find(rank => ranks.filter(r => r === rank).length === 4)!;
+      const kicker = ranks.find(rank => rank !== fourKind)!;
+      return { rank: 7, tiebreaker: fourKind * 100 + kicker, description: 'Four of a Kind' };
+    }
+
+    // Full House
+    if (rankCounts.some(count => count === 3) && rankCounts.some(count => count === 2)) {
+      const threeKind = ranks.find(rank => ranks.filter(r => r === rank).length === 3)!;
+      const pair = ranks.find(rank => ranks.filter(r => r === rank).length === 2)!;
+      return { rank: 6, tiebreaker: threeKind * 100 + pair, description: 'Full House' };
+    }
+
+    // Flush
+    if (isFlush) {
+      const tiebreaker = ranks.reduce((sum, rank, index) => sum + rank * Math.pow(100, 4 - index), 0);
+      return { rank: 5, tiebreaker, description: 'Flush' };
+    }
+
+    // Straight
+    if (isStraight) {
+      return { rank: 4, tiebreaker: ranks[0], description: 'Straight' };
+    }
+
+    // Three of a Kind
+    if (rankCounts.some(count => count === 3)) {
+      const threeKind = ranks.find(rank => ranks.filter(r => r === rank).length === 3)!;
+      const kickers = ranks.filter(rank => rank !== threeKind).sort((a, b) => b - a);
+      return { rank: 3, tiebreaker: threeKind * 10000 + kickers[0] * 100 + kickers[1], description: 'Three of a Kind' };
+    }
+
+    // Two Pair
+    const pairs = ranks.filter((rank, index, arr) => arr.filter(r => r === rank).length === 2);
+    if (pairs.length >= 4) { // Two pairs (each pair counted twice)
+      const uniquePairs = [...new Set(pairs)].sort((a, b) => b - a);
+      const kicker = ranks.find(rank => !uniquePairs.includes(rank))!;
+      return { rank: 2, tiebreaker: uniquePairs[0] * 10000 + uniquePairs[1] * 100 + kicker, description: 'Two Pair' };
+    }
+
+    // One Pair
+    if (rankCounts.some(count => count === 2)) {
+      const pair = ranks.find(rank => ranks.filter(r => r === rank).length === 2)!;
+      const kickers = ranks.filter(rank => rank !== pair).sort((a, b) => b - a);
+      const tiebreaker = pair * 1000000 + kickers.reduce((sum, rank, index) => sum + rank * Math.pow(100, 2 - index), 0);
+      return { rank: 1, tiebreaker, description: 'One Pair' };
+    }
+
+    // High Card
+    const tiebreaker = ranks.reduce((sum, rank, index) => sum + rank * Math.pow(100, 4 - index), 0);
+    return { rank: 0, tiebreaker, description: 'High Card' };
+  }
+
+  private static getCombinations<T>(arr: T[], r: number): T[][] {
+    if (r > arr.length) return [];
+    if (r === 1) return arr.map(item => [item]);
     
-    // For now, return a random value weighted by high cards
-    const highCardValue = this.getHighCardValue(holeCards);
-    return Math.min(0.9, highCardValue + Math.random() * 0.3);
+    const combinations: T[][] = [];
+    for (let i = 0; i <= arr.length - r; i++) {
+      const rest = this.getCombinations(arr.slice(i + 1), r - 1);
+      for (const combo of rest) {
+        combinations.push([arr[i], ...combo]);
+      }
+    }
+    return combinations;
+  }
+
+  private static getCardRankValue(rank: Card['rank']): number {
+    const rankValues: { [key: string]: number } = {
+      'A': 14, 'K': 13, 'Q': 12, 'J': 11, '10': 10,
+      '9': 9, '8': 8, '7': 7, '6': 6, '5': 5, '4': 4, '3': 3, '2': 2
+    };
+    return rankValues[rank] || 2;
+  }
+
+  private static getRankCounts(ranks: number[]): number[] {
+    const counts: { [key: number]: number } = {};
+    ranks.forEach(rank => counts[rank] = (counts[rank] || 0) + 1);
+    return Object.values(counts);
+  }
+
+  private static isStraight(ranks: number[]): boolean {
+    const uniqueRanks = [...new Set(ranks)].sort((a, b) => b - a);
+    if (uniqueRanks.length !== 5) return false;
+    
+    // Check for regular straight
+    for (let i = 0; i < 4; i++) {
+      if (uniqueRanks[i] - uniqueRanks[i + 1] !== 1) {
+        // Check for A-2-3-4-5 (wheel) straight
+        if (i === 0 && uniqueRanks[0] === 14 && uniqueRanks[1] === 5 && uniqueRanks[2] === 4 && uniqueRanks[3] === 3 && uniqueRanks[4] === 2) {
+          return true;
+        }
+        return false;
+      }
+    }
+    return true;
   }
 
   private static getHighCardValue(cards: Card[]): number {
@@ -123,8 +254,7 @@ export class PokerEngine {
   static resetPlayerActions(players: Player[]): Player[] {
     return players.map(player => ({
       ...player,
-      hasActed: false,
-      currentBet: 0
+      hasActed: false
     }));
   }
 

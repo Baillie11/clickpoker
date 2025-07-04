@@ -7,8 +7,18 @@ interface User {
   username: string;
   fullName: string;
   profileImage?: string;
+  avatarUrl?: string;
+  bio?: string;
+  city?: string;
   state?: string;
   country?: string;
+  timezone?: string;
+  favoritePokerVariant?: string;
+  experienceLevel?: 'Beginner' | 'Intermediate' | 'Advanced' | 'Professional';
+  totalGamesPlayed?: number;
+  totalWinnings?: number;
+  preferredTableStakes?: string;
+  privacyLevel?: 'Public' | 'Friends' | 'Private';
   createdAt: string;
 }
 
@@ -18,10 +28,14 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, username: string, fullName: string, password: string) => Promise<void>;
   logout: () => void;
+  updateUser: (userData: User) => void;
   loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Export AuthContext for components that need direct access
+export { AuthContext };
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -112,12 +126,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser(null);
   };
 
+  const updateUser = (userData: User) => {
+    setUser(userData);
+  };
+
   const value = {
     user,
     token,
     login,
     register,
     logout,
+    updateUser,
     loading,
   };
 

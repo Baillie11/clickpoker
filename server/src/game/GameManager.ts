@@ -214,8 +214,10 @@ export class GameManager {
         break;
 
       case 'raise':
-        if (amount && amount > this.table.currentBet) {
-          const totalBet = Math.min(amount, player.chips + player.currentBet);
+        if (amount && this.isValidRaise(amount, player)) {
+          // Ensure raise amount is a whole number and meets minimums
+          const validatedAmount = this.validateBetAmount(amount);
+          const totalBet = Math.min(validatedAmount, player.chips + player.currentBet);
           const additionalBet = totalBet - player.currentBet;
           player.chips -= additionalBet;
           player.currentBet = totalBet;
@@ -237,8 +239,6 @@ export class GameManager {
         }
         break;
     }
-
-    this.table.pot = PokerEngine.calculatePot(this.table.players);
     
     // Broadcast updated game state after action
     this.broadcastGameState();
@@ -304,7 +304,9 @@ export class GameManager {
     this.deck = deck;
     this.table.communityCards = cards;
     this.table.gamePhase = 'flop';
-    this.table.currentBet = 0;
+    
+    // Add current bets to pot and reset for new round
+    this.collectBetsIntoPot();
   }
 
   private dealTurn(): void {
@@ -312,7 +314,9 @@ export class GameManager {
     this.deck = deck;
     this.table.communityCards.push(...cards);
     this.table.gamePhase = 'turn';
-    this.table.currentBet = 0;
+    
+    // Add current bets to pot and reset for new round
+    this.collectBetsIntoPot();
   }
 
   private dealRiver(): void {
@@ -320,28 +324,86 @@ export class GameManager {
     this.deck = deck;
     this.table.communityCards.push(...cards);
     this.table.gamePhase = 'river';
+    
+    // Add current bets to pot and reset for new round
+    this.collectBetsIntoPot();
+  }
+
+  private collectBetsIntoPot(): void {
+    // Add all current bets to the pot
+    const currentRoundBets = this.table.players.reduce((total, player) => total + player.currentBet, 0);
+    this.table.pot += currentRoundBets;
+    
+    // Reset current bets for new round
+    this.table.players.forEach(player => {
+      player.currentBet = 0;
+    });
     this.table.currentBet = 0;
+    
+    console.log(`[GameManager] Collected $${currentRoundBets} into pot. Total pot: $${this.table.pot}`);
   }
 
   private showdown(): void {
     this.table.gamePhase = 'showdown';
     
-    // Simple winner determination (in a real game, you'd evaluate poker hands)
+    // Collect final bets into pot
+    this.collectBetsIntoPot();
+    
     const activePlayers = this.table.players.filter(p => !p.isFolded && p.isActive);
+    let winner: Player;
+    let winnerHand: { rank: number, tiebreaker: number, description: string };
     
     if (activePlayers.length === 1) {
       // Only one player left, they win
-      activePlayers[0].chips += this.table.pot;
+      winner = activePlayers[0];
+      winnerHand = { rank: 0, tiebreaker: 0, description: 'Won by default' };
     } else {
-      // For now, randomly determine winner (replace with actual hand evaluation)
-      const winner = activePlayers[Math.floor(Math.random() * activePlayers.length)];
-      winner.chips += this.table.pot;
+      // Evaluate all hands and find the best one
+      const playerHands = activePlayers.map(player => ({
+        player,
+        hand: PokerEngine.evaluateHand(player.holeCards, this.table.communityCards)
+      }));
+      
+      // Sort by hand rank (highest first), then by tiebreaker
+      playerHands.sort((a, b) => {
+        if (a.hand.rank !== b.hand.rank) {
+          return b.hand.rank - a.hand.rank; // Higher rank wins
+        }
+        return b.hand.tiebreaker - a.hand.tiebreaker; // Higher tiebreaker wins
+      });
+      
+      winner = playerHands[0].player;
+      winnerHand = playerHands[0].hand;
+      
+      // Log all hands for debugging
+      console.log('[GameManager] Showdown results:');
+      playerHands.forEach(({ player, hand }, index) => {
+        console.log(`  ${index + 1}. ${player.username}: ${hand.description} (Rank: ${hand.rank}, Tiebreaker: ${hand.tiebreaker})`);
+      });
     }
+    
+    // Set winner information
+    this.table.lastWinner = {
+      playerId: winner.id,
+      username: winner.username,
+      winnings: this.table.pot,
+      handDescription: winnerHand.description
+    };
+    
+    // Give winnings to winner
+    winner.chips += this.table.pot;
+    
+    console.log(`[GameManager] ${winner.username} wins $${this.table.pot} with ${winnerHand.description}!`);
+    
+    // Broadcast game state with winner information
+    this.broadcastGameState();
 
-    // Start new hand after delay
+    // Start new hand after 6 seconds (allowing time to see winner)
     setTimeout(() => {
+      // Clear winner info before new hand
+      this.table.lastWinner = undefined;
       this.startNewHand();
-    }, 3000);
+    }, 6000);
   }
 
   private processPlayerAction(): void {
@@ -429,5 +491,37 @@ export class GameManager {
     if (this.socketHandler) {
       this.socketHandler.broadcastGameState('main-table');
     }
+  }
+
+  private isValidRaise(amount: number, player: Player): boolean {
+    // Minimum raise must be at least the big blind more than current bet
+    const minRaise = this.table.currentBet + this.table.bigBlind;
+    
+    // Must be a whole number
+    if (amount !== Math.floor(amount)) {
+      return false;
+    }
+    
+    // Must be at least minimum raise amount
+    if (amount < minRaise) {
+      return false;
+    }
+    
+    // Can't raise more than player has
+    if (amount > player.chips + player.currentBet) {
+      return false;
+    }
+    
+    return true;
+  }
+
+  private validateBetAmount(amount: number): number {
+    // Ensure bet is a whole number
+    let validAmount = Math.floor(amount);
+    
+    // Ensure minimum bet is at least the small blind
+    validAmount = Math.max(validAmount, this.table.smallBlind);
+    
+    return validAmount;
   }
 }
