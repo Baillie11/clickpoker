@@ -1,7 +1,25 @@
+:root {
+  /* Default theme variables */
+  --table-felt: #228B22;
+  --table-rail: #8B4513;
+  --card-background: #ffffff;
+  --chip-white: linear-gradient(145deg, #ffffff, #e0e0e0);
+  --chip-red: linear-gradient(145deg, #ff4444, #cc3333);
+  --chip-green: linear-gradient(145deg, #44ff44, #33cc33);
+  --chip-black: linear-gradient(145deg, #333333, #111111);
+  --text-primary: #ffffff;
+  --text-secondary: #cccccc;
+  --text-accent: #ffeb3b;
+  --background: linear-gradient(135deg, #1a4a5e 0%, #0f3443 100%);
+  --table-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  --card-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --glow-color: #ffeb3b;
+}
+
 .poker-table-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #1a4a5e 0%, #0f3443 100%);
-  color: white;
+  background: var(--background);
+  color: var(--text-primary);
   display: flex;
   flex-direction: column;
 }
@@ -101,7 +119,7 @@
 }
 
 .current-player-card {
-  border-color: #ffeb3b !important;
+  border-color: var(--glow-color) !important;
   box-shadow: 0 0 15px rgba(255, 235, 59, 0.4);
   animation: pulse-glow 2s infinite;
 }
@@ -147,7 +165,7 @@
 
 .player-header .player-chips {
   font-size: 0.9rem;
-  color: #ffeb3b;
+  color: var(--text-accent);
   font-weight: bold;
 }
 
@@ -193,8 +211,8 @@
 }
 
 .table-surface {
-  background: #228B22;
-  border: 8px solid #8B4513;
+  background: var(--table-felt);
+  border: 8px solid var(--table-rail);
   border-radius: 80px;
   width: 800px;
   height: 450px;
@@ -203,7 +221,7 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--table-shadow);
 }
 
 .table-surface h2 {
@@ -240,8 +258,8 @@
 }
 
 .current-player-marker {
-  border-color: #ffeb3b !important;
-  box-shadow: 0 0 10px #ffeb3b;
+  border-color: var(--glow-color) !important;
+  box-shadow: 0 0 10px var(--glow-color);
 }
 
 .dealer-marker {
@@ -266,8 +284,8 @@
 }
 
 .current-player-indicator {
-  border-color: #ffeb3b !important;
-  box-shadow: 0 0 8px #ffeb3b;
+  border-color: var(--glow-color) !important;
+  box-shadow: 0 0 8px var(--glow-color);
 }
 
 .dealer-indicator {
@@ -309,7 +327,7 @@
 
 .player-chips {
   font-size: 0.8rem;
-  color: #ffeb3b;
+  color: var(--text-accent);
 }
 
 .empty-seat {
@@ -341,7 +359,7 @@
   font-size: 1.2rem;
   font-weight: bold;
   margin-bottom: 0.5rem;
-  color: #ffeb3b;
+  color: var(--text-accent);
 }
 
 .blinds {
@@ -393,7 +411,7 @@
 }
 
 .card {
-  background: white;
+  background: var(--card-background);
   border: 2px solid #333;
   border-radius: 8px;
   padding: 0.5rem;
@@ -405,7 +423,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--card-shadow);
 }
 
 .card.small {
@@ -431,8 +449,8 @@
 }
 
 .current-player {
-  border-color: #ffeb3b !important;
-  box-shadow: 0 0 10px #ffeb3b;
+  border-color: var(--glow-color) !important;
+  box-shadow: 0 0 10px var(--glow-color);
   animation: pulse-border 2s infinite;
 }
 
@@ -442,19 +460,19 @@
 
 @keyframes pulse-border {
   0% {
-    box-shadow: 0 0 5px #ffeb3b;
+    box-shadow: 0 0 5px var(--glow-color);
   }
   50% {
-    box-shadow: 0 0 15px #ffeb3b;
+    box-shadow: 0 0 15px var(--glow-color);
   }
   100% {
-    box-shadow: 0 0 5px #ffeb3b;
+    box-shadow: 0 0 5px var(--glow-color);
   }
 }
 
 .player-bet {
   font-size: 0.7rem;
-  color: #ffeb3b;
+  color: var(--text-accent);
   font-weight: bold;
 }
 
@@ -480,7 +498,7 @@
 
 .action-panel h3 {
   margin: 0 0 1rem 0;
-  color: #ffeb3b;
+  color: var(--text-accent);
 }
 
 .action-buttons {
@@ -596,7 +614,7 @@
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #1a4a5e 0%, #0f3443 100%);
+  background: var(--background);
 }
 
 /* Winner display styles */
@@ -735,25 +753,25 @@
 }
 
 .poker-chip.white {
-  background: linear-gradient(145deg, #ffffff, #e0e0e0);
+  background: var(--chip-white);
   border-color: #cccccc;
   color: #333333;
 }
 
 .poker-chip.red {
-  background: linear-gradient(145deg, #ff4444, #cc3333);
+  background: var(--chip-red);
   border-color: #aa2222;
   color: white;
 }
 
 .poker-chip.green {
-  background: linear-gradient(145deg, #44ff44, #33cc33);
+  background: var(--chip-green);
   border-color: #22aa22;
   color: white;
 }
 
 .poker-chip.black {
-  background: linear-gradient(145deg, #333333, #111111);
+  background: var(--chip-black);
   border-color: #000000;
   color: white;
 }
@@ -772,7 +790,7 @@
 .bet-amount {
   font-size: 0.8rem;
   font-weight: bold;
-  color: #ffeb3b;
+  color: var(--text-accent);
   margin-bottom: 0.25rem;
 }
 
@@ -921,12 +939,12 @@
 
 /* Card glow effect for current player */
 .current-player .hole-cards .card {
-  box-shadow: 0 0 10px #ffeb3b, 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 10px var(--glow-color), var(--card-shadow);
   animation: card-glow 2s infinite;
 }
 
 @keyframes card-glow {
-  0% { box-shadow: 0 0 10px #ffeb3b, 0 2px 4px rgba(0, 0, 0, 0.3); }
-  50% { box-shadow: 0 0 20px #ffeb3b, 0 4px 8px rgba(255, 235, 59, 0.4); }
-  100% { box-shadow: 0 0 10px #ffeb3b, 0 2px 4px rgba(0, 0, 0, 0.3); }
+  0% { box-shadow: 0 0 10px var(--glow-color), var(--card-shadow); }
+  50% { box-shadow: 0 0 20px var(--glow-color), 0 4px 8px rgba(255, 235, 59, 0.4); }
+  100% { box-shadow: 0 0 10px var(--glow-color), var(--card-shadow); }
 }

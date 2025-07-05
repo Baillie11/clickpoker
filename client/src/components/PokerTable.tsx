@@ -1,22 +1,69 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { themeManager } from '../utils/ThemeManager';
+import { soundManager } from '../utils/SoundManager';
+import ThemeSelector from './ThemeSelector';
 import './PokerTable.css';
 
 const PokerTable: React.FC = () => {
   const { user, logout } = useAuth();
+  const [isThemeSelectorOpen, setIsThemeSelectorOpen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+
+  useEffect(() => {
+    // Initialize theme and sound settings
+    themeManager.loadSavedTheme();
+    soundManager.setEnabled(soundEnabled);
+    
+    // Play welcome sound
+    setTimeout(() => {
+      soundManager.play('buttonClick');
+    }, 500);
+  }, []);
 
   const handleLogout = () => {
+    soundManager.play('buttonClick');
     logout();
+  };
+
+  const openThemeSelector = () => {
+    soundManager.play('buttonClick');
+    setIsThemeSelectorOpen(true);
+  };
+
+  const closeThemeSelector = () => {
+    soundManager.play('buttonClick');
+    setIsThemeSelectorOpen(false);
+  };
+
+  const toggleSound = () => {
+    const newSoundState = !soundEnabled;
+    setSoundEnabled(newSoundState);
+    soundManager.setEnabled(newSoundState);
+    if (newSoundState) {
+      soundManager.play('buttonClick');
+    }
   };
 
   return (
     <div className="poker-table-container">
       <div className="header">
         <div className="user-info">
-          <span>Welcome, {user?.fullName} (@{user?.username})</span>
-          <button onClick={handleLogout} className="logout-button">
-            Logout
-          </button>
+          <div className="user-welcome">
+            <span>Welcome, {user?.fullName} (@{user?.username})</span>
+            <div className="connection-status">Connected to Click Poker</div>
+          </div>
+          <div className="header-buttons">
+            <button onClick={toggleSound} className="profile-button">
+              {soundEnabled ? '🔊' : '🔇'} Sound {soundEnabled ? 'On' : 'Off'}
+            </button>
+            <button onClick={openThemeSelector} className="profile-button">
+              🎨 Themes
+            </button>
+            <button onClick={handleLogout} className="logout-button">
+              Logout
+            </button>
+          </div>
         </div>
       </div>
 
@@ -62,6 +109,11 @@ const PokerTable: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      <ThemeSelector 
+        isOpen={isThemeSelectorOpen} 
+        onClose={closeThemeSelector} 
+      />
     </div>
   );
 };
