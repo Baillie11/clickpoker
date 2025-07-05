@@ -231,7 +231,7 @@ export class AIPlayer {
   }
 
   // Calculator Kate - Perfect mathematical decisions
-  private static mathematicalDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number) {
+  private static mathematicalDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
     const potOdds = callAmount > 0 ? callAmount / (pot + callAmount) : 0;
     const impliedOdds = handStrength; // Simplified
     
@@ -253,7 +253,7 @@ export class AIPlayer {
   }
 
   // Bluff Master Bob - Aggressive bluffer
-  private static looseAggressiveDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number, bluffChance: number) {
+  private static looseAggressiveDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number, bluffChance: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
     const isBluffing = Math.random() < bluffChance;
     
     if (isBluffing && callAmount < player.chips * 0.3) {
@@ -277,7 +277,7 @@ export class AIPlayer {
   }
 
   // Cool Hand Luke - Tight-aggressive
-  private static tightAggressiveDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number) {
+  private static tightAggressiveDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
     console.log(`[AI] ${player.username}: Analyzing situation... 😎`);
     
     if (handStrength < 0.5) {
@@ -298,7 +298,7 @@ export class AIPlayer {
   }
 
   // Shark Attack Sally - Adaptive player
-  private static adaptiveDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number) {
+  private static adaptiveDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
     // Simulates reading opponents (simplified)
     const tableImage = Math.random(); // 0-1, represents how aggressive table is
     const adjustment = tableImage > 0.6 ? 0.2 : -0.1; // Adapt to table
@@ -321,7 +321,7 @@ export class AIPlayer {
   }
 
   // Wild Card Willie - Unpredictable
-  private static unpredictableDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number) {
+  private static unpredictableDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
     const randomFactor = Math.random();
     
     console.log(`[AI] ${player.username}: Feeling lucky! 🎲`);
@@ -352,7 +352,7 @@ export class AIPlayer {
   }
 
   // Default decision for other personalities
-  private static defaultDecision(player: Player, personality: any, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number) {
+  private static defaultDecision(player: Player, personality: any, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
     const foldThreshold = personality.tightness * 0.4;
     const raiseThreshold = 0.6 - (personality.aggressiveness * 0.3);
     

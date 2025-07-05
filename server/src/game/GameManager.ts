@@ -132,6 +132,9 @@ export class GameManager {
     this.deck = deck;
     this.table.players = players;
 
+    // Calculate initial pot from blinds
+    this.table.pot = this.table.players.reduce((pot, player) => pot + player.currentBet, 0);
+
     // Set first player to act (after big blind)
     const bigBlindPos = PokerEngine.getBigBlindPosition(this.table.dealerPosition, this.table.players);
     this.table.currentPlayerPosition = PokerEngine.getNextActivePlayer(this.table.players, bigBlindPos);
@@ -152,7 +155,9 @@ export class GameManager {
       const sbAmount = Math.min(this.table.smallBlind, smallBlindPlayer.chips);
       smallBlindPlayer.chips -= sbAmount;
       smallBlindPlayer.currentBet = sbAmount;
-      this.table.currentBet = sbAmount;
+      if (smallBlindPlayer.chips === 0) {
+        smallBlindPlayer.isAllIn = true;
+      }
     }
 
     // Post big blind
@@ -161,10 +166,13 @@ export class GameManager {
       const bbAmount = Math.min(this.table.bigBlind, bigBlindPlayer.chips);
       bigBlindPlayer.chips -= bbAmount;
       bigBlindPlayer.currentBet = bbAmount;
-      this.table.currentBet = bbAmount;
+      this.table.currentBet = bbAmount; // Current bet is set to big blind amount
+      if (bigBlindPlayer.chips === 0) {
+        bigBlindPlayer.isAllIn = true;
+      }
     }
 
-    this.table.pot = PokerEngine.calculatePot(this.table.players);
+    console.log(`[GameManager] Posted blinds: SB=$${smallBlindPlayer?.currentBet || 0}, BB=$${bigBlindPlayer?.currentBet || 0}`);
   }
 
   playerAction(userId: string, action: 'fold' | 'call' | 'raise' | 'check', amount?: number): boolean {
@@ -239,6 +247,11 @@ export class GameManager {
         }
         break;
     }
+    
+    // Update pot calculation after any betting action
+    this.table.pot = this.table.players.reduce((pot, p) => pot + p.currentBet, 0);
+    
+    console.log(`[GameManager] Player ${player.username} ${action}${amount ? ` $${amount}` : ''}. Current bet: $${player.currentBet}, Chips: $${player.chips}, Pot: $${this.table.pot}`);
     
     // Broadcast updated game state after action
     this.broadcastGameState();

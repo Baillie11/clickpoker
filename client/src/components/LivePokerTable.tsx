@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { io, Socket } from 'socket.io-client';
+import { themeManager } from '../utils/ThemeManager';
+import { soundManager } from '../utils/SoundManager';
 import UserProfile from './UserProfile';
+import ThemeSelector from './ThemeSelector';
 import './PokerTable.css';
 
 // Simplified types for client-side
@@ -52,6 +55,19 @@ const LivePokerTable: React.FC = () => {
   const [connected, setConnected] = useState(false);
   const [raiseAmount, setRaiseAmount] = useState('');
   const [showProfile, setShowProfile] = useState(false);
+  const [isThemeSelectorOpen, setIsThemeSelectorOpen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+
+  useEffect(() => {
+    // Initialize theme and sound settings
+    themeManager.loadSavedTheme();
+    soundManager.setEnabled(soundEnabled);
+    
+    // Play welcome sound
+    setTimeout(() => {
+      soundManager.play('buttonClick');
+    }, 500);
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -97,8 +113,49 @@ const LivePokerTable: React.FC = () => {
 
   const handleAction = (action: 'fold' | 'call' | 'raise' | 'check', amount?: number) => {
     if (socket && connected) {
+      // Play appropriate sound
+      switch (action) {
+        case 'fold':
+          soundManager.play('fold');
+          break;
+        case 'call':
+          soundManager.play('check');
+          break;
+        case 'raise':
+          soundManager.play('raise');
+          soundManager.playChipBet(amount || 0);
+          break;
+        case 'check':
+          soundManager.play('check');
+          break;
+      }
+      
       socket.emit('playerAction', action, amount);
       setRaiseAmount('');
+    }
+  };
+
+  const handleLogout = () => {
+    soundManager.play('buttonClick');
+    logout();
+  };
+
+  const openThemeSelector = () => {
+    soundManager.play('buttonClick');
+    setIsThemeSelectorOpen(true);
+  };
+
+  const closeThemeSelector = () => {
+    soundManager.play('buttonClick');
+    setIsThemeSelectorOpen(false);
+  };
+
+  const toggleSound = () => {
+    const newSoundState = !soundEnabled;
+    setSoundEnabled(newSoundState);
+    soundManager.setEnabled(newSoundState);
+    if (newSoundState) {
+      soundManager.play('buttonClick');
     }
   };
 
@@ -289,10 +346,16 @@ const LivePokerTable: React.FC = () => {
             </span>
           </div>
           <div className="header-buttons">
+            <button onClick={toggleSound} className="profile-button">
+              {soundEnabled ? '🔊' : '🔇'} Sound {soundEnabled ? 'On' : 'Off'}
+            </button>
+            <button onClick={openThemeSelector} className="profile-button">
+              🎨 Themes
+            </button>
             <button onClick={() => setShowProfile(true)} className="profile-button">
               👤 Profile
             </button>
-            <button onClick={logout} className="logout-button">
+            <button onClick={handleLogout} className="logout-button">
               Logout
             </button>
           </div>
@@ -341,7 +404,7 @@ const LivePokerTable: React.FC = () => {
               return (
                 <div key={seatIndex} className="player-position" style={getPlayerPositionStyle(seatIndex)}>
                   {player ? (
-                    <div className={`player-info-card ${isCurrentPlayer ? 'current-player-card' : ''} ${isMe ? 'my-player-card' : ''}`}>
+                    <div className={`player-info-card ${isCurrentPlayer ? 'current-player-card' : ''} ${isMe ? 'my-player-card' : ''} ${player.isAllIn ? 'all-in-player-card' : ''}`}>
                       <div className="player-header">
                         <div className="player-name">
                           {player.username}
@@ -530,6 +593,11 @@ const LivePokerTable: React.FC = () => {
       <UserProfile 
         isOpen={showProfile} 
         onClose={() => setShowProfile(false)} 
+      />
+      
+      <ThemeSelector 
+        isOpen={isThemeSelectorOpen} 
+        onClose={closeThemeSelector} 
       />
     </div>
   );
