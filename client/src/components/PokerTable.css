@@ -558,6 +558,38 @@
   background: #f57c00;
 }
 
+.all-in-btn {
+  background: linear-gradient(145deg, #e91e63, #c2185b);
+  color: white;
+  border: 2px solid #ad1457;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 8px rgba(233, 30, 99, 0.3);
+  transition: all 0.3s ease;
+}
+
+.all-in-btn:hover {
+  background: linear-gradient(145deg, #f06292, #e91e63);
+  border-color: #c2185b;
+  box-shadow: 0 6px 12px rgba(233, 30, 99, 0.5);
+  transform: translateY(-2px);
+}
+
+.all-in-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(233, 30, 99, 0.4);
+}
+
+.all-in-btn:disabled {
+  background: #666;
+  border-color: #555;
+  color: #999;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .raise-section {
   display: flex;
   flex-direction: column;

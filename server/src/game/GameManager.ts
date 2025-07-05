@@ -1,6 +1,7 @@
 import { PokerTable, Player, Card } from '../../../shared/types';
 import { PokerEngine } from './PokerEngine';
 import { AIPlayer } from './AIPlayer';
+import { HandLogger } from './HandLogger';
 import { v4 as uuidv4 } from 'uuid';
 
 export class GameManager {
@@ -9,6 +10,7 @@ export class GameManager {
   private gameActive: boolean = false;
   private actionTimer?: NodeJS.Timeout;
   private socketHandler?: any; // Will be set by SocketHandler
+  private handLogger: HandLogger;
 
   constructor(tableId?: string) {
     this.table = {
@@ -24,6 +26,10 @@ export class GameManager {
       gamePhase: 'preflop',
       isTrainingMode: false
     };
+    
+    // Initialize hand logger
+    this.handLogger = new HandLogger();
+    console.log(`[GameManager] Hand logger initialized. Log file: ${this.handLogger.getLogFilePath()}`);
   }
 
   addPlayer(userId: string, username: string): boolean {
@@ -126,6 +132,10 @@ export class GameManager {
 
     // Post blinds
     this.postBlinds();
+    
+    // Get blind positions for logging
+    const smallBlindPos = PokerEngine.getSmallBlindPosition(this.table.dealerPosition, this.table.players);
+    const bigBlindPos = PokerEngine.getBigBlindPosition(this.table.dealerPosition, this.table.players);
 
     // Deal hole cards
     const { deck, players } = PokerEngine.dealHoleCards(this.deck, this.table.players);
@@ -134,9 +144,11 @@ export class GameManager {
 
     // Calculate initial pot from blinds
     this.table.pot = this.table.players.reduce((pot, player) => pot + player.currentBet, 0);
+    
+    // Start hand logging
+    this.handLogger.startNewHand(this.table, this.table.dealerPosition, smallBlindPos, bigBlindPos);
 
     // Set first player to act (after big blind)
-    const bigBlindPos = PokerEngine.getBigBlindPosition(this.table.dealerPosition, this.table.players);
     this.table.currentPlayerPosition = PokerEngine.getNextActivePlayer(this.table.players, bigBlindPos);
 
     // Broadcast initial game state
@@ -251,6 +263,11 @@ export class GameManager {
     // Update pot calculation after any betting action
     this.table.pot = this.table.players.reduce((pot, p) => pot + p.currentBet, 0);
     
+    // Log the action (only if not in showdown phase)
+    if (this.table.gamePhase !== 'showdown') {
+      this.handLogger.logAction(player, action, amount, this.table.gamePhase as 'preflop' | 'flop' | 'turn' | 'river', this.table);
+    }
+    
     console.log(`[GameManager] Player ${player.username} ${action}${amount ? ` $${amount}` : ''}. Current bet: $${player.currentBet}, Chips: $${player.chips}, Pot: $${this.table.pot}`);
     
     // Broadcast updated game state after action
@@ -318,6 +335,9 @@ export class GameManager {
     this.table.communityCards = cards;
     this.table.gamePhase = 'flop';
     
+    // Log community cards
+    this.handLogger.logCommunityCards(cards, 'flop');
+    
     // Add current bets to pot and reset for new round
     this.collectBetsIntoPot();
   }
@@ -328,6 +348,9 @@ export class GameManager {
     this.table.communityCards.push(...cards);
     this.table.gamePhase = 'turn';
     
+    // Log community cards
+    this.handLogger.logCommunityCards(cards, 'turn');
+    
     // Add current bets to pot and reset for new round
     this.collectBetsIntoPot();
   }
@@ -337,6 +360,9 @@ export class GameManager {
     this.deck = deck;
     this.table.communityCards.push(...cards);
     this.table.gamePhase = 'river';
+    
+    // Log community cards
+    this.handLogger.logCommunityCards(cards, 'river');
     
     // Add current bets to pot and reset for new round
     this.collectBetsIntoPot();
@@ -407,6 +433,15 @@ export class GameManager {
     winner.chips += this.table.pot;
     
     console.log(`[GameManager] ${winner.username} wins $${this.table.pot} with ${winnerHand.description}!`);
+    
+    // Log hand completion
+    this.handLogger.finishHand(
+      winner.id,
+      winner.username,
+      winnerHand.description,
+      this.table.pot,
+      this.table
+    );
     
     // Broadcast game state with winner information
     this.broadcastGameState();
@@ -507,21 +542,28 @@ export class GameManager {
   }
 
   private isValidRaise(amount: number, player: Player): boolean {
-    // Minimum raise must be at least the big blind more than current bet
-    const minRaise = this.table.currentBet + this.table.bigBlind;
-    
     // Must be a whole number
     if (amount !== Math.floor(amount)) {
       return false;
     }
     
-    // Must be at least minimum raise amount
-    if (amount < minRaise) {
+    // Can't raise more than player has
+    if (amount > player.chips + player.currentBet) {
       return false;
     }
     
-    // Can't raise more than player has
-    if (amount > player.chips + player.currentBet) {
+    // Check if this is an all-in
+    const isAllIn = amount === player.chips + player.currentBet;
+    
+    // If going all-in, always allow (even if below minimum raise)
+    if (isAllIn) {
+      console.log(`[GameManager] ${player.username} going all-in with $${amount}`);
+      return true;
+    }
+    
+    // Otherwise, must meet minimum raise requirement
+    const minRaise = this.table.currentBet + this.table.bigBlind;
+    if (amount < minRaise) {
       return false;
     }
     

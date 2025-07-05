@@ -496,6 +496,20 @@ const LivePokerTable: React.FC = () => {
                   </button>
                 )}
                 
+                {/* All In Button */}
+                <button 
+                  onClick={() => {
+                    const allInAmount = myPlayer.chips + myPlayer.currentBet;
+                    soundManager.play('allIn');
+                    handleAction('raise', allInAmount);
+                  }}
+                  className="all-in-btn"
+                  disabled={myPlayer.chips === 0}
+                  title={`Bet all remaining chips: $${myPlayer.chips}`}
+                >
+                  All In ${myPlayer.chips > 0 ? `($${myPlayer.chips})` : ''}
+                </button>
+                
                 <div className="raise-section">
                   {/* Quick bet buttons */}
                   <div className="quick-bet-buttons">
