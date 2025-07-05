@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, getProfile, updateProfile } from '../controllers/authController';
+import { register, login, getProfile, updateProfile, forgotPassword, verifyResetToken, resetPassword } from '../controllers/authController';
 import { validateRegistration, validateLogin } from '../middleware/validation';
 import { authenticateToken } from '../middleware/auth';
 
@@ -16,5 +16,10 @@ router.get('/profile', authenticateToken, getProfile);
 
 // PUT /api/auth/profile
 router.put('/profile', authenticateToken, updateProfile);
+
+// Password reset routes
+router.post('/forgot-password', forgotPassword);
+router.get('/verify-reset-token/:token', verifyResetToken);
+router.post('/reset-password/:token', resetPassword);
 
 export default router;
