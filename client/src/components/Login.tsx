@@ -30,7 +30,7 @@ const Login: React.FC = () => {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h2>Login to Poker App</h2>
+        <h2>Log into Click Poker</h2>
         
         {error && <div className="error-message">{error}</div>}
         
@@ -68,9 +68,12 @@ const Login: React.FC = () => {
           </button>
         </form>
 
-        <p className="auth-link">
-          Don't have an account? <Link to="/register">Register here</Link>
-        </p>
+        <div className="auth-links">
+          <Link to="/forgot-password" className="forgot-password-link">Forgot your password?</Link>
+          <p className="auth-link">
+            Don't have an account? <Link to="/register">Register here</Link>
+          </p>
+        </div>
       </div>
     </div>
   );

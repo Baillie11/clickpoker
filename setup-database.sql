@@ -23,6 +23,8 @@ CREATE TABLE users (
     total_winnings INTEGER DEFAULT 0,
     preferred_table_stakes VARCHAR(50) DEFAULT 'Low',
     privacy_level ENUM('Public', 'Friends', 'Private') DEFAULT 'Public',
+    reset_token VARCHAR(255) NULL,
+    reset_token_expiry TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

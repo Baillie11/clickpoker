@@ -73,7 +73,7 @@ const Register: React.FC = () => {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h2>Register for Poker App</h2>
+        <h2>Register for Click Poker</h2>
         
         {error && <div className="error-message">{error}</div>}
         

@@ -1,6 +1,7 @@
 import { PokerTable, Player, Card } from '../../../shared/types';
 import { PokerEngine } from './PokerEngine';
 import { AIPlayer } from './AIPlayer';
+import { HandLogger } from './HandLogger';
 import { v4 as uuidv4 } from 'uuid';
 
 export class GameManager {
@@ -9,6 +10,9 @@ export class GameManager {
   private gameActive: boolean = false;
   private actionTimer?: NodeJS.Timeout;
   private socketHandler?: any; // Will be set by SocketHandler
+  private handLogger: HandLogger;
+  private actionCount: number = 0; // Prevent infinite loops
+  private showdownPlayers: Player[] = []; // Track players in showdown
 
   constructor(tableId?: string) {
     this.table = {
@@ -24,18 +28,30 @@ export class GameManager {
       gamePhase: 'preflop',
       isTrainingMode: false
     };
+    
+    // Initialize hand logger
+    this.handLogger = new HandLogger();
+    console.log(`[GameManager] Hand logger initialized. Log file: ${this.handLogger.getLogFilePath()}`);
   }
 
-  addPlayer(userId: string, username: string): boolean {
+  addPlayer(userId: string, username: string, profileImage?: string): boolean {
     if (this.table.players.length >= 6) {
       return false; // Table is full
     }
 
-    // Find first available seat
-    const occupiedPositions = this.table.players.map(p => p.position);
-    let position = 0;
-    while (occupiedPositions.includes(position) && position < 6) {
-      position++;
+    // Assign real player to position 3 (top-center seat)
+    let position = 3;
+    
+    // Check if position 3 is already occupied
+    const existingPlayer = this.table.players.find(p => p.position === position);
+    if (existingPlayer) {
+      // If position 3 is taken, find first available seat
+      const occupiedPositions = this.table.players.map(p => p.position);
+      let fallbackPosition = 0;
+      while (occupiedPositions.includes(fallbackPosition) && fallbackPosition < 6) {
+        fallbackPosition++;
+      }
+      position = fallbackPosition;
     }
 
     const newPlayer: Player = {
@@ -50,7 +66,8 @@ export class GameManager {
       currentBet: 0,
       hasActed: false,
       isFolded: false,
-      isAllIn: false
+      isAllIn: false,
+      avatarUrl: profileImage ? `http://localhost:5000${profileImage}` : undefined
     };
 
     this.table.players.push(newPlayer);
@@ -78,6 +95,49 @@ export class GameManager {
     if (this.table.players.filter(p => !p.isAI).length < 1) {
       this.gameActive = false;
       this.clearActionTimer();
+    }
+
+    return true;
+  }
+
+  sitOutPlayer(userId: string): boolean {
+    const player = this.table.players.find(p => p.userId === userId);
+    if (!player) return false;
+
+    // Mark player as sitting out (temporarily inactive)
+    player.isActive = false;
+    player.isFolded = true; // Fold their current hand if they have one
+    
+    console.log(`[GameManager] Player ${player.username} is sitting out`);
+    
+    // If it's their turn, move to next player
+    if (this.table.currentPlayerPosition === player.position) {
+      this.moveToNextPlayer();
+    }
+    
+    // If game is running and too few active players, pause the game
+    if (this.table.players.filter(p => p.isActive && !p.isAI).length < 1) {
+      this.gameActive = false;
+      this.clearActionTimer();
+    }
+
+    return true;
+  }
+
+  returnPlayerToTable(userId: string): boolean {
+    const player = this.table.players.find(p => p.userId === userId);
+    if (!player) return false;
+
+    // Mark player as active again
+    player.isActive = true;
+    player.isFolded = false; // Reset folded status for next hand
+    
+    console.log(`[GameManager] Player ${player.username} is returning to table`);
+    
+    // If game was paused due to lack of players, restart it
+    if (!this.gameActive && this.table.players.filter(p => p.isActive && !p.isAI).length >= 1) {
+      this.gameActive = true;
+      this.startNewHand();
     }
 
     return true;
@@ -126,14 +186,25 @@ export class GameManager {
 
     // Post blinds
     this.postBlinds();
+    
+    // Get blind positions for logging and for client
+    const smallBlindPos = PokerEngine.getSmallBlindPosition(this.table.dealerPosition, this.table.players);
+    const bigBlindPos = PokerEngine.getBigBlindPosition(this.table.dealerPosition, this.table.players);
+    this.table.smallBlindPosition = smallBlindPos;
+    this.table.bigBlindPosition = bigBlindPos;
 
     // Deal hole cards
     const { deck, players } = PokerEngine.dealHoleCards(this.deck, this.table.players);
     this.deck = deck;
     this.table.players = players;
 
+    // Calculate initial pot from blinds
+    this.table.pot = this.table.players.reduce((pot, player) => pot + player.currentBet, 0);
+    
+    // Start hand logging
+    this.handLogger.startNewHand(this.table, this.table.dealerPosition, smallBlindPos, bigBlindPos);
+
     // Set first player to act (after big blind)
-    const bigBlindPos = PokerEngine.getBigBlindPosition(this.table.dealerPosition, this.table.players);
     this.table.currentPlayerPosition = PokerEngine.getNextActivePlayer(this.table.players, bigBlindPos);
 
     // Broadcast initial game state
@@ -152,7 +223,9 @@ export class GameManager {
       const sbAmount = Math.min(this.table.smallBlind, smallBlindPlayer.chips);
       smallBlindPlayer.chips -= sbAmount;
       smallBlindPlayer.currentBet = sbAmount;
-      this.table.currentBet = sbAmount;
+      if (smallBlindPlayer.chips === 0) {
+        smallBlindPlayer.isAllIn = true;
+      }
     }
 
     // Post big blind
@@ -161,10 +234,13 @@ export class GameManager {
       const bbAmount = Math.min(this.table.bigBlind, bigBlindPlayer.chips);
       bigBlindPlayer.chips -= bbAmount;
       bigBlindPlayer.currentBet = bbAmount;
-      this.table.currentBet = bbAmount;
+      this.table.currentBet = bbAmount; // Current bet is set to big blind amount
+      if (bigBlindPlayer.chips === 0) {
+        bigBlindPlayer.isAllIn = true;
+      }
     }
 
-    this.table.pot = PokerEngine.calculatePot(this.table.players);
+    console.log(`[GameManager] Posted blinds: SB=$${smallBlindPlayer?.currentBet || 0}, BB=$${bigBlindPlayer?.currentBet || 0}`);
   }
 
   playerAction(userId: string, action: 'fold' | 'call' | 'raise' | 'check', amount?: number): boolean {
@@ -240,12 +316,48 @@ export class GameManager {
         break;
     }
     
+    // Update pot calculation after any betting action
+    this.table.pot = this.table.players.reduce((pot, p) => pot + p.currentBet, 0);
+    
+    // Log the action (only if not in showdown phase)
+    if (this.table.gamePhase !== 'showdown') {
+      this.handLogger.logAction(player, action, amount, this.table.gamePhase as 'preflop' | 'flop' | 'turn' | 'river', this.table);
+    }
+    
+    console.log(`[GameManager] Player ${player.username} ${action}${amount ? ` $${amount}` : ''}. Current bet: $${player.currentBet}, Chips: $${player.chips}, Pot: $${this.table.pot}`);
+    
+    // Broadcast playerAction event for AI players (real players already get this from socket handler)
+    if (player.isAI && this.socketHandler) {
+      this.socketHandler.broadcastPlayerAction(player.userId || player.id, action, amount);
+    }
+    
     // Broadcast updated game state after action
     this.broadcastGameState();
   }
 
   private moveToNextPlayer(): void {
     console.log('[GameManager] Moving to next player...');
+    
+    // Check if only one player is left (everyone else folded)
+    const activePlayers = this.table.players.filter(p => p.isActive && !p.isFolded);
+    if (activePlayers.length <= 1) {
+      console.log('[GameManager] Only one player left, going to showdown');
+      this.showdown();
+      return;
+    }
+    
+    // Check if all remaining players are all-in (no chips left to act with)
+    const allAllIn = activePlayers.every(p => p.isAllIn || p.chips === 0);
+    if (allAllIn) {
+      console.log('[GameManager] All remaining players are all-in, advancing phase');
+      if (this.table.gamePhase === 'river') {
+        this.showdown();
+      } else {
+        this.moveToNextPhase();
+      }
+      return;
+    }
+    
     // Check if betting round is complete
     if (PokerEngine.isRoundComplete(this.table.players, this.table.currentBet)) {
       this.moveToNextPhase();
@@ -269,6 +381,18 @@ export class GameManager {
 
   private moveToNextPhase(): void {
     console.log('[GameManager] Moving to next phase...');
+    
+    // Reset action count for new phase
+    this.actionCount = 0;
+    
+    // Check if only one player is left (everyone else folded)
+    const activePlayers = this.table.players.filter(p => p.isActive && !p.isFolded);
+    if (activePlayers.length <= 1) {
+      console.log('[GameManager] Only one player left, going to showdown');
+      this.showdown();
+      return;
+    }
+    
     // Reset players for next phase
     this.table.players = PokerEngine.resetPlayerActions(this.table.players);
 
@@ -305,6 +429,9 @@ export class GameManager {
     this.table.communityCards = cards;
     this.table.gamePhase = 'flop';
     
+    // Log community cards
+    this.handLogger.logCommunityCards(cards, 'flop');
+    
     // Add current bets to pot and reset for new round
     this.collectBetsIntoPot();
   }
@@ -315,6 +442,9 @@ export class GameManager {
     this.table.communityCards.push(...cards);
     this.table.gamePhase = 'turn';
     
+    // Log community cards
+    this.handLogger.logCommunityCards(cards, 'turn');
+    
     // Add current bets to pot and reset for new round
     this.collectBetsIntoPot();
   }
@@ -324,6 +454,9 @@ export class GameManager {
     this.deck = deck;
     this.table.communityCards.push(...cards);
     this.table.gamePhase = 'river';
+    
+    // Log community cards
+    this.handLogger.logCommunityCards(cards, 'river');
     
     // Add current bets to pot and reset for new round
     this.collectBetsIntoPot();
@@ -346,18 +479,23 @@ export class GameManager {
   private showdown(): void {
     this.table.gamePhase = 'showdown';
     
-    // Collect final bets into pot
-    this.collectBetsIntoPot();
-    
     const activePlayers = this.table.players.filter(p => !p.isFolded && p.isActive);
     let winner: Player;
     let winnerHand: { rank: number, tiebreaker: number, description: string };
     
     if (activePlayers.length === 1) {
       // Only one player left, they win
+      // Don't collect bets again - pot already contains all bets
       winner = activePlayers[0];
       winnerHand = { rank: 0, tiebreaker: 0, description: 'Won by default' };
+      this.showdownPlayers = []; // No showdown to show cards for
     } else {
+      // Multiple players in showdown - collect final bets into pot
+      this.collectBetsIntoPot();
+      
+      // Store showdown players for card revelation
+      this.showdownPlayers = [...activePlayers];
+      
       // Evaluate all hands and find the best one
       const playerHands = activePlayers.map(player => ({
         player,
@@ -395,19 +533,49 @@ export class GameManager {
     
     console.log(`[GameManager] ${winner.username} wins $${this.table.pot} with ${winnerHand.description}!`);
     
+    // Log hand completion
+    this.handLogger.finishHand(
+      winner.id,
+      winner.username,
+      winnerHand.description,
+      this.table.pot,
+      this.table
+    );
+    
     // Broadcast game state with winner information
     this.broadcastGameState();
 
     // Start new hand after 6 seconds (allowing time to see winner)
     setTimeout(() => {
-      // Clear winner info before new hand
+      // AI chip reload logic
+      if (this.socketHandler) {
+        this.table.players.forEach(player => {
+          if (player.isAI && player.chips === 0) {
+            player.chips = 1000;
+            this.socketHandler.broadcastPlayerAnnouncement(
+              `${player.username} has reloaded with $1000 chips!`
+            );
+          }
+        });
+      }
+      // Clear winner info and showdown players before new hand
       this.table.lastWinner = undefined;
+      this.showdownPlayers = [];
       this.startNewHand();
     }, 6000);
   }
 
   private processPlayerAction(): void {
     this.clearActionTimer();
+    
+    // Safety check to prevent infinite loops
+    this.actionCount++;
+    if (this.actionCount > 100) {
+      console.log('[GameManager] Too many actions, forcing next phase to prevent infinite loop');
+      this.actionCount = 0;
+      this.moveToNextPhase();
+      return;
+    }
     
     // Check if currentPlayerPosition is valid
     if (this.table.currentPlayerPosition < 0 || this.table.currentPlayerPosition >= this.table.players.length) {
@@ -425,7 +593,7 @@ export class GameManager {
 
     if (currentPlayer.isAI) {
       // AI player action with thinking delay
-      const thinkingTime = AIPlayer.getThinkingTime();
+      const thinkingTime = AIPlayer.getThinkingTime(currentPlayer);
       
       this.actionTimer = setTimeout(() => {
         const decision = AIPlayer.makeDecision(
@@ -466,8 +634,16 @@ export class GameManager {
     const tableView = { ...this.table };
     
     tableView.players = this.table.players.map(player => {
-      if (player.userId === userId || this.table.isTrainingMode) {
-        return player; // Show all cards to the requesting player or in training mode
+      // Show cards if:
+      // 1. It's the requesting player
+      // 2. Training mode is enabled
+      // 3. Player is in showdown (2+ players reached showdown)
+      const shouldShowCards = player.userId === userId || 
+                             this.table.isTrainingMode || 
+                             this.showdownPlayers.some(sp => sp.id === player.id);
+      
+      if (shouldShowCards) {
+        return player; // Show all cards
       } else {
         return {
           ...player,
@@ -494,21 +670,28 @@ export class GameManager {
   }
 
   private isValidRaise(amount: number, player: Player): boolean {
-    // Minimum raise must be at least the big blind more than current bet
-    const minRaise = this.table.currentBet + this.table.bigBlind;
-    
     // Must be a whole number
     if (amount !== Math.floor(amount)) {
       return false;
     }
     
-    // Must be at least minimum raise amount
-    if (amount < minRaise) {
+    // Can't raise more than player has
+    if (amount > player.chips + player.currentBet) {
       return false;
     }
     
-    // Can't raise more than player has
-    if (amount > player.chips + player.currentBet) {
+    // Check if this is an all-in
+    const isAllIn = amount === player.chips + player.currentBet;
+    
+    // If going all-in, always allow (even if below minimum raise)
+    if (isAllIn) {
+      console.log(`[GameManager] ${player.username} going all-in with $${amount}`);
+      return true;
+    }
+    
+    // Otherwise, must meet minimum raise requirement
+    const minRaise = this.table.currentBet + this.table.bigBlind;
+    if (amount < minRaise) {
       return false;
     }
     

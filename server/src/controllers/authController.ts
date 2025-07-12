@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { validationResult } from 'express-validator';
+import crypto from 'crypto';
 import pool from '../config/database';
+import { validationResult } from 'express-validator';
 
 // Register new user
 export const register = async (req: Request, res: Response): Promise<void> => {
@@ -366,5 +367,162 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ message: 'Server error updating profile' });
+  }
+};
+
+// Request password reset
+export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({ message: 'Email is required' });
+      return;
+    }
+
+    // Check if user exists
+    const [result] = await pool.execute(
+      'SELECT id, email FROM users WHERE email = ?',
+      [email]
+    );
+
+    if ((result as any[]).length === 0) {
+      // Don't reveal if email exists or not for security
+      res.status(200).json({ 
+        message: 'If an account with that email exists, we have sent a password reset link.' 
+      });
+      return;
+    }
+
+    const user = (result as any[])[0];
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
+
+    // Store reset token in database
+    await pool.execute(
+      'UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE id = ?',
+      [resetToken, resetTokenExpiry, user.id]
+    );
+
+    // In a real application, you would send an email here
+    // For now, we'll log the reset link to the console
+    const resetLink = `http://localhost:3000/reset-password/${resetToken}`;
+    console.log(`Password reset link for ${email}: ${resetLink}`);
+    
+    // TODO: Implement actual email sending here
+    // await sendPasswordResetEmail(email, resetLink);
+
+    res.status(200).json({ 
+      message: 'Password reset instructions have been sent to your email address.',
+      // In development, include the reset link in the response
+      ...(process.env.NODE_ENV === 'development' && { resetLink })
+    });
+
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ message: 'Server error processing password reset request' });
+  }
+};
+
+// Verify reset token
+export const verifyResetToken = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token } = req.params;
+
+    if (!token) {
+      res.status(400).json({ message: 'Reset token is required' });
+      return;
+    }
+
+    // Check if token exists and is not expired
+    const [result] = await pool.execute(
+      'SELECT id FROM users WHERE reset_token = ? AND reset_token_expiry > NOW()',
+      [token]
+    );
+
+    if ((result as any[]).length === 0) {
+      res.status(400).json({ message: 'Invalid or expired reset token' });
+      return;
+    }
+
+    res.status(200).json({ message: 'Reset token is valid' });
+
+  } catch (error) {
+    console.error('Verify reset token error:', error);
+    res.status(500).json({ message: 'Server error verifying reset token' });
+  }
+};
+
+// Reset password
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!token || !password) {
+      res.status(400).json({ message: 'Reset token and new password are required' });
+      return;
+    }
+
+    // Validate password strength
+    if (password.length < 6) {
+      res.status(400).json({ message: 'Password must be at least 6 characters long' });
+      return;
+    }
+
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)) {
+      res.status(400).json({ 
+        message: 'Password must contain at least one lowercase letter, one uppercase letter, and one number' 
+      });
+      return;
+    }
+
+    // Check if token exists and is not expired
+    const [result] = await pool.execute(
+      'SELECT id FROM users WHERE reset_token = ? AND reset_token_expiry > NOW()',
+      [token]
+    );
+
+    if ((result as any[]).length === 0) {
+      res.status(400).json({ message: 'Invalid or expired reset token' });
+      return;
+    }
+
+    const user = (result as any[])[0];
+
+    // Hash new password
+    const saltRounds = 12;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
+
+    // Update password and clear reset token
+    await pool.execute(
+      'UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?',
+      [passwordHash, user.id]
+    );
+
+    res.status(200).json({ message: 'Password has been reset successfully' });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ message: 'Server error resetting password' });
+  }
+};
+
+export const uploadProfileImage = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user.userId;
+    if (!req.file) {
+      res.status(400).json({ message: 'No file uploaded' });
+      return;
+    }
+    // Save the relative path to the DB
+    const imageUrl = `/uploads/profile-images/${req.file.filename}`;
+    await pool.execute('UPDATE users SET profile_image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [imageUrl, userId]);
+    res.json({ message: 'Profile image uploaded successfully', imageUrl });
+  } catch (error) {
+    console.error('Upload profile image error:', error);
+    res.status(500).json({ message: 'Server error uploading profile image' });
   }
 };

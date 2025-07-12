@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import './UserProfile.css';
+import axios from 'axios';
 
 interface ProfileData {
   fullName?: string;
@@ -26,6 +27,8 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [profileData, setProfileData] = useState<ProfileData>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -42,6 +45,8 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose }) => {
         privacyLevel: user.privacyLevel || 'Public',
         avatarUrl: user.avatarUrl || ''
       });
+      setImagePreview(user.profileImage ? `http://localhost:5000${user.profileImage}` : null);
+      setSelectedImage(null);
     }
   }, [user]);
 
@@ -52,11 +57,31 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose }) => {
     }));
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedImage(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
   const handleSave = async () => {
     if (!user) return;
-
     setIsLoading(true);
     try {
+      let profileImageUrl = profileData.avatarUrl || user.profileImage || '';
+      if (selectedImage) {
+        const formData = new FormData();
+        formData.append('image', selectedImage);
+        const token = localStorage.getItem('token');
+        const uploadRes = await axios.post('http://localhost:5000/api/auth/upload-profile-image', formData, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        profileImageUrl = uploadRes.data.imageUrl;
+      }
       const token = localStorage.getItem('token');
       const response = await fetch('http://localhost:5000/api/auth/profile', {
         method: 'PUT',
@@ -64,9 +89,8 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose }) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(profileData)
+        body: JSON.stringify({ ...profileData, profileImage: profileImageUrl })
       });
-
       if (response.ok) {
         const data = await response.json();
         updateUser(data.user);
@@ -98,6 +122,8 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose }) => {
         privacyLevel: user.privacyLevel || 'Public',
         avatarUrl: user.avatarUrl || ''
       });
+      setImagePreview(user.profileImage ? `http://localhost:5000${user.profileImage}` : null);
+      setSelectedImage(null);
     }
     setIsEditing(false);
   };
@@ -123,20 +149,23 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose }) => {
           <div className="profile-avatar-section">
             <div className="avatar-container">
               <img 
-                src={getAvatarUrl()} 
+                src={imagePreview || getAvatarUrl()} 
                 alt="Profile Avatar" 
                 className="profile-avatar"
               />
               {isEditing && (
-                <div className="avatar-url-input">
-                  <label>Avatar URL:</label>
-                  <input
-                    type="url"
-                    value={profileData.avatarUrl || ''}
-                    onChange={(e) => handleInputChange('avatarUrl', e.target.value)}
-                    placeholder="Enter image URL or leave blank for auto-generated"
-                  />
-                </div>
+                <>
+                  <input type="file" accept="image/*" onChange={handleImageChange} />
+                  <div className="avatar-url-input">
+                    <label>Avatar URL:</label>
+                    <input
+                      type="url"
+                      value={profileData.avatarUrl || ''}
+                      onChange={(e) => handleInputChange('avatarUrl', e.target.value)}
+                      placeholder="Enter image URL or leave blank for auto-generated"
+                    />
+                  </div>
+                </>
               )}
             </div>
           </div>

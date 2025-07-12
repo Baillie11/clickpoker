@@ -72,6 +72,7 @@ export interface Player {
   hasActed: boolean;
   isFolded: boolean;
   isAllIn: boolean;
+  avatarUrl?: string; // Profile image URL
 }
 
 export interface PokerTable {
@@ -92,6 +93,8 @@ export interface PokerTable {
     winnings: number;
     handDescription?: string;
   };
+  smallBlindPosition?: number;
+  bigBlindPosition?: number;
 }
 
 // Socket Events
@@ -101,10 +104,13 @@ export interface ServerToClientEvents {
   playerAction: (playerId: string, action: string, amount?: number) => void;
   newHand: (table: PokerTable) => void;
   gameOver: (winner: Player, winnings: number) => void;
+  playerAnnouncement: (message: string) => void;
 }
 
 export interface ClientToServerEvents {
   joinTable: (tableId: string) => void;
   playerAction: (action: 'fold' | 'call' | 'raise' | 'check', amount?: number) => void;
   leaveTable: () => void;
+  sitOut: () => void;
+  returnToTable: () => void;
 }

@@ -2,18 +2,83 @@ import { Player, Card } from '../../../shared/types';
 import { PokerEngine } from './PokerEngine';
 
 export class AIPlayer {
-  static readonly AI_NAMES = [
-    'Bot_Ace', 'Bot_King', 'Bot_Queen', 'Bot_Jack', 'Bot_Ten',
-    'CyberShark', 'PokerBot', 'ChipStack', 'BluffMaster', 'CardCounter'
+  static readonly AI_PERSONALITIES = [
+    {
+      name: 'Cool Hand Luke',
+      emoji: '😎',
+      difficulty: 'Expert',
+      tightness: 0.8,
+      aggressiveness: 0.7,
+      bluffFrequency: 0.15,
+      adaptability: 0.9,
+      style: 'Tight-Aggressive',
+      description: 'Never shows emotion, plays premium hands aggressively'
+    },
+    {
+      name: 'Bluff Master Bob', 
+      emoji: '🔥',
+      difficulty: 'Expert',
+      tightness: 0.3,
+      aggressiveness: 0.9,
+      bluffFrequency: 0.4,
+      adaptability: 0.7,
+      style: 'Loose-Aggressive',
+      description: 'Loves to bluff and apply pressure'
+    },
+    {
+      name: 'Calculator Kate',
+      emoji: '🤓', 
+      difficulty: 'Expert',
+      tightness: 0.7,
+      aggressiveness: 0.6,
+      bluffFrequency: 0.1,
+      adaptability: 0.8,
+      style: 'Mathematical',
+      description: 'Perfect pot odds and probability calculations'
+    },
+    {
+      name: 'Shark Attack Sally',
+      emoji: '😈',
+      difficulty: 'Expert', 
+      tightness: 0.6,
+      aggressiveness: 0.8,
+      bluffFrequency: 0.25,
+      adaptability: 1.0,
+      style: 'Adaptive-Aggressive',
+      description: 'Reads opponents and adapts strategy'
+    },
+    {
+      name: 'Wild Card Willie',
+      emoji: '🎲',
+      difficulty: 'Intermediate',
+      tightness: 0.2,
+      aggressiveness: 0.6,
+      bluffFrequency: 0.3,
+      adaptability: 0.4,
+      style: 'Loose-Unpredictable', 
+      description: 'Completely unpredictable loose cannon'
+    },
+    {
+      name: 'Tournament Tom',
+      emoji: '🏆',
+      difficulty: 'Advanced',
+      tightness: 0.7,
+      aggressiveness: 0.5,
+      bluffFrequency: 0.2,
+      adaptability: 0.8,
+      style: 'Tournament-Style',
+      description: 'Conservative early, aggressive when needed'
+    }
   ];
 
   static createAIPlayer(position: number): Player {
-    const name = this.AI_NAMES[position % this.AI_NAMES.length];
+    const personality = this.AI_PERSONALITIES[position % this.AI_PERSONALITIES.length];
+    const displayName = `${personality.name} ${personality.emoji}`;
     
     return {
       id: `ai_${position}_${Date.now()}`,
       userId: undefined, // AI players don't have user accounts
-      username: name,
+      username: displayName,
       chips: 1000,
       holeCards: [],
       position,
@@ -35,59 +100,74 @@ export class AIPlayer {
     bigBlind: number
   ): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
     
+    const personality = this.getPersonality(player.username);
     const handStrength = PokerEngine.getHandStrength(player.holeCards, communityCards);
     const callAmount = currentBet - player.currentBet;
     const potOdds = callAmount > 0 ? callAmount / (pot + callAmount) : 0;
-    const chipRatio = player.chips / 1000; // Normalize to starting stack
     
-    // AI personality factors (each AI can have different tendencies)
-    const aggressiveness = this.getAggressiveness(player.username);
-    const tightness = this.getTightness(player.username);
+    // Handle blind situations properly - only in preflop
+    // If player has already posted a blind and current bet equals their blind, they can check
+    if (communityCards.length === 0 && player.currentBet > 0 && player.currentBet === currentBet) {
+      // Player has already "called" with their blind, can check or raise
+      return this.handleBlindAction(player, personality, handStrength, pot, currentBet, bigBlind);
+    }
     
-    // Decision thresholds based on hand strength and situation
-    const foldThreshold = tightness * 0.3;
-    const raiseThreshold = 0.7 - (aggressiveness * 0.2);
+    // Apply personality-based decision making
+    return this.makePersonalityBasedDecision(
+      player, personality, handStrength, callAmount, pot, currentBet, bigBlind
+    );
+  }
+
+  private static getPersonality(playerName: string) {
+    // Extract personality from the AI name (removes emoji)
+    const cleanName = playerName.replace(/[^\w\s]/gi, '').trim();
+    return this.AI_PERSONALITIES.find(p => cleanName.includes(p.name)) || this.AI_PERSONALITIES[0];
+  }
+
+  private static makePersonalityBasedDecision(
+    player: Player,
+    personality: any,
+    handStrength: number,
+    callAmount: number,
+    pot: number,
+    currentBet: number,
+    bigBlind: number
+  ): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
+    
+    // Personality-based thresholds
+    const foldThreshold = personality.tightness * 0.4;
+    const raiseThreshold = 0.6 - (personality.aggressiveness * 0.3);
+    const bluffChance = personality.bluffFrequency;
     
     // Can't call if not enough chips
     if (callAmount >= player.chips) {
-      if (handStrength > 0.8) {
-        return { action: 'call', amount: player.chips }; // All-in with strong hand
-      } else {
-        return { action: 'fold' };
+      if (handStrength > (0.7 - personality.aggressiveness * 0.2)) {
+        console.log(`[AI] ${player.username}: Going all-in with strong hand!`);
+        return { action: 'call', amount: player.chips };
       }
-    }
-    
-    // No current bet - can check or raise
-    if (currentBet === 0 || callAmount === 0) {
-      if (handStrength > raiseThreshold && Math.random() < aggressiveness) {
-        const raiseAmount = this.calculateRaiseAmount(pot, bigBlind, player.chips, handStrength);
-        return { action: 'raise', amount: raiseAmount };
-      }
-      return { action: 'check' };
-    }
-    
-    // Fold if hand is too weak
-    if (handStrength < foldThreshold) {
       return { action: 'fold' };
     }
     
-    // Call if hand is decent and pot odds are good
-    if (handStrength > 0.4 && potOdds < 0.5) {
-      return { action: 'call' };
+    // Special personality behaviors
+    switch (personality.style) {
+      case 'Mathematical':
+        return this.mathematicalDecision(player, handStrength, callAmount, pot, currentBet, bigBlind);
+      
+      case 'Loose-Aggressive':
+        return this.looseAggressiveDecision(player, handStrength, callAmount, pot, currentBet, bigBlind, bluffChance);
+      
+      case 'Tight-Aggressive':
+        return this.tightAggressiveDecision(player, handStrength, callAmount, pot, currentBet, bigBlind);
+      
+      case 'Adaptive-Aggressive':
+        return this.adaptiveDecision(player, handStrength, callAmount, pot, currentBet, bigBlind);
+      
+      case 'Loose-Unpredictable':
+        return this.unpredictableDecision(player, handStrength, callAmount, pot, currentBet, bigBlind);
+      
+      default:
+        return this.defaultDecision(player, personality, handStrength, callAmount, pot, currentBet, bigBlind);
     }
-    
-    // Raise with strong hands
-    if (handStrength > raiseThreshold && Math.random() < (aggressiveness + handStrength) / 2) {
-      const raiseAmount = this.calculateRaiseAmount(pot, bigBlind, player.chips, handStrength);
-      return { action: 'raise', amount: currentBet + raiseAmount };
-    }
-    
-    // Default to call if we reach here
-    if (handStrength > 0.3) {
-      return { action: 'call' };
-    }
-    
-    return { action: 'fold' };
   }
 
   private static getAggressiveness(name: string): number {
@@ -152,8 +232,221 @@ export class AIPlayer {
     return Math.random() < (bluffFrequency * opponentAdjustment * boardFactor);
   }
 
-  static getThinkingTime(): number {
-    // Random delay to simulate thinking (0.5-1.5 seconds)
-    return 500 + Math.random() * 1000;
+  static getThinkingTime(player?: Player): number {
+    // Base thinking time (2-4 seconds)
+    let baseTime = 2000 + Math.random() * 2000;
+    
+    if (player && player.isAI) {
+      const personality = this.getPersonality(player.username);
+      
+      // Adjust thinking time based on personality
+      switch (personality.style) {
+        case 'Mathematical':
+          // Calculator Kate thinks longer for complex calculations
+          baseTime = 3000 + Math.random() * 2000;
+          break;
+        case 'Loose-Aggressive':
+          // Bluff Master Bob acts quickly
+          baseTime = 1500 + Math.random() * 1000;
+          break;
+        case 'Tight-Aggressive':
+          // Cool Hand Luke takes time to analyze
+          baseTime = 2500 + Math.random() * 1500;
+          break;
+        case 'Loose-Unpredictable':
+          // Wild Card Willie is unpredictable in timing too
+          baseTime = 1000 + Math.random() * 3000;
+          break;
+        case 'Tournament-Style':
+          // Tournament Tom is methodical
+          baseTime = 2000 + Math.random() * 2000;
+          break;
+        default:
+          baseTime = 2000 + Math.random() * 2000;
+      }
+    }
+    
+    return baseTime;
+  }
+
+  // Handle actions when player has already posted a blind
+  private static handleBlindAction(
+    player: Player, 
+    personality: any, 
+    handStrength: number, 
+    pot: number, 
+    currentBet: number, 
+    bigBlind: number
+  ): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
+    
+    // Player has already posted a blind and no one has raised
+    // They can check (which is like calling their own blind) or raise
+    
+    // If they have a strong hand, they might raise
+    if (handStrength > 0.6 && Math.random() < personality.aggressiveness) {
+      const raiseAmount = currentBet + Math.floor(pot * 0.5);
+      // Make sure they have enough chips to raise
+      if (raiseAmount <= player.chips + player.currentBet) {
+        console.log(`[AI] ${player.username}: Raising from blind position with strong hand`);
+        return { action: 'raise', amount: raiseAmount };
+      }
+    }
+    
+    // If they have a decent hand, they might raise occasionally
+    if (handStrength > 0.4 && Math.random() < (personality.aggressiveness * 0.5)) {
+      const raiseAmount = currentBet + bigBlind * 2;
+      // Make sure they have enough chips to raise
+      if (raiseAmount <= player.chips + player.currentBet) {
+        console.log(`[AI] ${player.username}: Raising from blind position`);
+        return { action: 'raise', amount: raiseAmount };
+      }
+    }
+    
+    // Otherwise, they check (which is like calling their own blind)
+    console.log(`[AI] ${player.username}: Checking from blind position`);
+    return { action: 'check' };
+  }
+
+  // Calculator Kate - Perfect mathematical decisions
+  private static mathematicalDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
+    const potOdds = callAmount > 0 ? callAmount / (pot + callAmount) : 0;
+    const impliedOdds = handStrength; // Simplified
+    
+    console.log(`[AI] ${player.username}: Calculating pot odds... ${(potOdds * 100).toFixed(1)}%`);
+    
+    if (currentBet === 0) {
+      return handStrength > 0.6 ? 
+        { action: 'raise', amount: currentBet + Math.floor(pot * 0.75) } : 
+        { action: 'check' };
+    }
+    
+    if (impliedOdds > potOdds && handStrength > 0.3) {
+      return { action: 'call' };
+    }
+    
+    return handStrength > 0.7 ? 
+      { action: 'raise', amount: currentBet + bigBlind * 3 } : 
+      { action: 'fold' };
+  }
+
+  // Bluff Master Bob - Aggressive bluffer
+  private static looseAggressiveDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number, bluffChance: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
+    const isBluffing = Math.random() < bluffChance;
+    
+    if (isBluffing && callAmount < player.chips * 0.3) {
+      console.log(`[AI] ${player.username}: Time to bluff! 🔥`);
+      return { action: 'raise', amount: currentBet + Math.floor(pot * 1.2) };
+    }
+    
+    if (currentBet === 0) {
+      return handStrength > 0.3 || Math.random() < 0.4 ? 
+        { action: 'raise', amount: bigBlind * (2 + Math.floor(Math.random() * 3)) } :
+        { action: 'check' };
+    }
+    
+    if (handStrength > 0.3 || isBluffing) {
+      return Math.random() < 0.6 ? 
+        { action: 'raise', amount: currentBet + bigBlind * 2 } :
+        { action: 'call' };
+    }
+    
+    return { action: 'fold' };
+  }
+
+  // Cool Hand Luke - Tight-aggressive
+  private static tightAggressiveDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
+    console.log(`[AI] ${player.username}: Analyzing situation... 😎`);
+    
+    if (handStrength < 0.5) {
+      return { action: 'fold' };
+    }
+    
+    if (currentBet === 0) {
+      return handStrength > 0.7 ? 
+        { action: 'raise', amount: bigBlind * 3 } :
+        { action: 'check' };
+    }
+    
+    if (handStrength > 0.8) {
+      return { action: 'raise', amount: currentBet + Math.floor(pot * 0.8) };
+    }
+    
+    return handStrength > 0.6 ? { action: 'call' } : { action: 'fold' };
+  }
+
+  // Shark Attack Sally - Adaptive player
+  private static adaptiveDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
+    // Simulates reading opponents (simplified)
+    const tableImage = Math.random(); // 0-1, represents how aggressive table is
+    const adjustment = tableImage > 0.6 ? 0.2 : -0.1; // Adapt to table
+    
+    console.log(`[AI] ${player.username}: Reading the table... 😈`);
+    
+    const adjustedThreshold = Math.max(0.2, 0.5 + adjustment);
+    
+    if (currentBet === 0) {
+      return handStrength > adjustedThreshold ? 
+        { action: 'raise', amount: bigBlind * (2 + Math.floor(tableImage * 3)) } :
+        { action: 'check' };
+    }
+    
+    if (handStrength > (0.7 + adjustment)) {
+      return { action: 'raise', amount: currentBet + Math.floor(pot * (0.6 + tableImage * 0.4)) };
+    }
+    
+    return handStrength > adjustedThreshold ? { action: 'call' } : { action: 'fold' };
+  }
+
+  // Wild Card Willie - Unpredictable
+  private static unpredictableDecision(player: Player, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
+    const randomFactor = Math.random();
+    
+    console.log(`[AI] ${player.username}: Feeling lucky! 🎲`);
+    
+    // Sometimes makes completely random decisions
+    if (randomFactor < 0.2) {
+      const actions = ['fold', 'call', 'raise'];
+      const randomAction = actions[Math.floor(Math.random() * actions.length)];
+      
+      if (randomAction === 'raise' && callAmount < player.chips) {
+        return { action: 'raise', amount: currentBet + bigBlind * (1 + Math.floor(Math.random() * 5)) };
+      }
+      return { action: randomAction as 'fold' | 'call' };
+    }
+    
+    // Otherwise uses loose logic
+    if (currentBet === 0) {
+      return randomFactor > 0.4 ? 
+        { action: 'raise', amount: bigBlind * Math.ceil(randomFactor * 4) } :
+        { action: 'check' };
+    }
+    
+    if (handStrength > 0.2 && randomFactor > 0.3) {
+      return { action: 'call' };
+    }
+    
+    return { action: 'fold' };
+  }
+
+  // Default decision for other personalities
+  private static defaultDecision(player: Player, personality: any, handStrength: number, callAmount: number, pot: number, currentBet: number, bigBlind: number): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
+    const foldThreshold = personality.tightness * 0.4;
+    const raiseThreshold = 0.6 - (personality.aggressiveness * 0.3);
+    
+    if (currentBet === 0) {
+      return handStrength > raiseThreshold ? 
+        { action: 'raise', amount: bigBlind * 2 } :
+        { action: 'check' };
+    }
+    
+    if (handStrength < foldThreshold) {
+      return { action: 'fold' };
+    }
+    
+    if (handStrength > raiseThreshold && Math.random() < personality.aggressiveness) {
+      return { action: 'raise', amount: currentBet + Math.floor(pot * 0.5) };
+    }
+    
+    return handStrength > 0.4 ? { action: 'call' } : { action: 'fold' };
   }
 }
