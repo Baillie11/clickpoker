@@ -105,6 +105,13 @@ export class AIPlayer {
     const callAmount = currentBet - player.currentBet;
     const potOdds = callAmount > 0 ? callAmount / (pot + callAmount) : 0;
     
+    // Handle blind situations properly - only in preflop
+    // If player has already posted a blind and current bet equals their blind, they can check
+    if (communityCards.length === 0 && player.currentBet > 0 && player.currentBet === currentBet) {
+      // Player has already "called" with their blind, can check or raise
+      return this.handleBlindAction(player, personality, handStrength, pot, currentBet, bigBlind);
+    }
+    
     // Apply personality-based decision making
     return this.makePersonalityBasedDecision(
       player, personality, handStrength, callAmount, pot, currentBet, bigBlind
@@ -225,9 +232,79 @@ export class AIPlayer {
     return Math.random() < (bluffFrequency * opponentAdjustment * boardFactor);
   }
 
-  static getThinkingTime(): number {
-    // Random delay to simulate thinking (0.5-1.5 seconds)
-    return 500 + Math.random() * 1000;
+  static getThinkingTime(player?: Player): number {
+    // Base thinking time (2-4 seconds)
+    let baseTime = 2000 + Math.random() * 2000;
+    
+    if (player && player.isAI) {
+      const personality = this.getPersonality(player.username);
+      
+      // Adjust thinking time based on personality
+      switch (personality.style) {
+        case 'Mathematical':
+          // Calculator Kate thinks longer for complex calculations
+          baseTime = 3000 + Math.random() * 2000;
+          break;
+        case 'Loose-Aggressive':
+          // Bluff Master Bob acts quickly
+          baseTime = 1500 + Math.random() * 1000;
+          break;
+        case 'Tight-Aggressive':
+          // Cool Hand Luke takes time to analyze
+          baseTime = 2500 + Math.random() * 1500;
+          break;
+        case 'Loose-Unpredictable':
+          // Wild Card Willie is unpredictable in timing too
+          baseTime = 1000 + Math.random() * 3000;
+          break;
+        case 'Tournament-Style':
+          // Tournament Tom is methodical
+          baseTime = 2000 + Math.random() * 2000;
+          break;
+        default:
+          baseTime = 2000 + Math.random() * 2000;
+      }
+    }
+    
+    return baseTime;
+  }
+
+  // Handle actions when player has already posted a blind
+  private static handleBlindAction(
+    player: Player, 
+    personality: any, 
+    handStrength: number, 
+    pot: number, 
+    currentBet: number, 
+    bigBlind: number
+  ): { action: 'fold' | 'call' | 'raise' | 'check', amount?: number } {
+    
+    // Player has already posted a blind and no one has raised
+    // They can check (which is like calling their own blind) or raise
+    
+    // If they have a strong hand, they might raise
+    if (handStrength > 0.6 && Math.random() < personality.aggressiveness) {
+      const raiseAmount = currentBet + Math.floor(pot * 0.5);
+      // Make sure they have enough chips to raise
+      if (raiseAmount <= player.chips + player.currentBet) {
+        console.log(`[AI] ${player.username}: Raising from blind position with strong hand`);
+        return { action: 'raise', amount: raiseAmount };
+      }
+    }
+    
+    // If they have a decent hand, they might raise occasionally
+    if (handStrength > 0.4 && Math.random() < (personality.aggressiveness * 0.5)) {
+      const raiseAmount = currentBet + bigBlind * 2;
+      // Make sure they have enough chips to raise
+      if (raiseAmount <= player.chips + player.currentBet) {
+        console.log(`[AI] ${player.username}: Raising from blind position`);
+        return { action: 'raise', amount: raiseAmount };
+      }
+    }
+    
+    // Otherwise, they check (which is like calling their own blind)
+    console.log(`[AI] ${player.username}: Checking from blind position`);
+    return { action: 'check' };
   }
 
   // Calculator Kate - Perfect mathematical decisions

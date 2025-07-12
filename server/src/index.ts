@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import authRoutes from './routes/auth';
 import { createServer } from 'http';
 import { SocketHandler } from './socket/socketHandler';
+import path from 'path';
 
 // Configure environment variables
 dotenv.config();
@@ -25,6 +26,7 @@ app.use(cors({ origin: process.env.CLIENT_URL }));
 app.use(limiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Routes
 app.use('/api/auth', authRoutes);

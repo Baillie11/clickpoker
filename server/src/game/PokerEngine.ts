@@ -75,6 +75,12 @@ export class PokerEngine {
       attempts++;
     }
     
+    // If all remaining players are all-in, return -1 to trigger showdown
+    const nonAllInPlayers = activePlayers.filter(p => !p.isAllIn);
+    if (nonAllInPlayers.length === 0) {
+      return -1;
+    }
+    
     return -1;
   }
 
@@ -117,6 +123,10 @@ export class PokerEngine {
     const rankCounts = this.getRankCounts(ranks);
     const isFlush = suits.every(suit => suit === suits[0]);
     const isStraight = this.isStraight(ranks);
+    const rankName = (val: number) => {
+      const map: { [key: number]: string } = {14:'Ace',13:'King',12:'Queen',11:'Jack',10:'Ten',9:'Nine',8:'Eight',7:'Seven',6:'Six',5:'Five',4:'Four',3:'Three',2:'Two'};
+      return map[val] || val.toString();
+    };
 
     // Royal Flush
     if (isFlush && isStraight && ranks[0] === 14) {
@@ -125,39 +135,38 @@ export class PokerEngine {
 
     // Straight Flush
     if (isFlush && isStraight) {
-      return { rank: 8, tiebreaker: ranks[0], description: 'Straight Flush' };
+      return { rank: 8, tiebreaker: ranks[0], description: `Straight Flush, ${rankName(ranks[0])} High` };
     }
 
     // Four of a Kind
     if (rankCounts.some(count => count === 4)) {
       const fourKind = ranks.find(rank => ranks.filter(r => r === rank).length === 4)!;
       const kicker = ranks.find(rank => rank !== fourKind)!;
-      return { rank: 7, tiebreaker: fourKind * 100 + kicker, description: 'Four of a Kind' };
+      return { rank: 7, tiebreaker: fourKind * 100 + kicker, description: `Four of a Kind, ${rankName(fourKind)}s` };
     }
 
     // Full House
     if (rankCounts.some(count => count === 3) && rankCounts.some(count => count === 2)) {
       const threeKind = ranks.find(rank => ranks.filter(r => r === rank).length === 3)!;
       const pair = ranks.find(rank => ranks.filter(r => r === rank).length === 2)!;
-      return { rank: 6, tiebreaker: threeKind * 100 + pair, description: 'Full House' };
+      return { rank: 6, tiebreaker: threeKind * 100 + pair, description: `Full House, ${rankName(threeKind)}s over ${rankName(pair)}s` };
     }
 
     // Flush
     if (isFlush) {
       const tiebreaker = ranks.reduce((sum, rank, index) => sum + rank * Math.pow(100, 4 - index), 0);
-      return { rank: 5, tiebreaker, description: 'Flush' };
+      return { rank: 5, tiebreaker, description: `Flush, ${rankName(ranks[0])} High` };
     }
 
     // Straight
     if (isStraight) {
-      return { rank: 4, tiebreaker: ranks[0], description: 'Straight' };
+      return { rank: 4, tiebreaker: ranks[0], description: `Straight, ${rankName(ranks[0])} High` };
     }
 
     // Three of a Kind
     if (rankCounts.some(count => count === 3)) {
       const threeKind = ranks.find(rank => ranks.filter(r => r === rank).length === 3)!;
-      const kickers = ranks.filter(rank => rank !== threeKind).sort((a, b) => b - a);
-      return { rank: 3, tiebreaker: threeKind * 10000 + kickers[0] * 100 + kickers[1], description: 'Three of a Kind' };
+      return { rank: 3, tiebreaker: threeKind * 10000, description: `Three of a Kind, ${rankName(threeKind)}s` };
     }
 
     // Two Pair
@@ -165,20 +174,18 @@ export class PokerEngine {
     if (pairs.length >= 4) { // Two pairs (each pair counted twice)
       const uniquePairs = [...new Set(pairs)].sort((a, b) => b - a);
       const kicker = ranks.find(rank => !uniquePairs.includes(rank))!;
-      return { rank: 2, tiebreaker: uniquePairs[0] * 10000 + uniquePairs[1] * 100 + kicker, description: 'Two Pair' };
+      return { rank: 2, tiebreaker: uniquePairs[0] * 10000 + uniquePairs[1] * 100 + kicker, description: `Two Pair, ${rankName(uniquePairs[0])}s and ${rankName(uniquePairs[1])}s` };
     }
 
     // One Pair
     if (rankCounts.some(count => count === 2)) {
       const pair = ranks.find(rank => ranks.filter(r => r === rank).length === 2)!;
-      const kickers = ranks.filter(rank => rank !== pair).sort((a, b) => b - a);
-      const tiebreaker = pair * 1000000 + kickers.reduce((sum, rank, index) => sum + rank * Math.pow(100, 2 - index), 0);
-      return { rank: 1, tiebreaker, description: 'One Pair' };
+      return { rank: 1, tiebreaker: pair * 1000000, description: `Pair of ${rankName(pair)}s` };
     }
 
     // High Card
     const tiebreaker = ranks.reduce((sum, rank, index) => sum + rank * Math.pow(100, 4 - index), 0);
-    return { rank: 0, tiebreaker, description: 'High Card' };
+    return { rank: 0, tiebreaker, description: `High Card, ${rankName(ranks[0])}` };
   }
 
   private static getCombinations<T>(arr: T[], r: number): T[][] {
@@ -239,6 +246,7 @@ export class PokerEngine {
   static isRoundComplete(players: Player[], currentBet: number): boolean {
     const activePlayers = players.filter(p => p.isActive && !p.isFolded);
     
+    // If only one player left, round is complete
     if (activePlayers.length <= 1) return true;
     
     // Check if all active players have acted and matched the current bet
@@ -270,20 +278,32 @@ export class PokerEngine {
     return newDealer;
   }
 
+  static getNextPlayerWithChips(players: Player[], currentPosition: number): number {
+    let nextPosition = (currentPosition + 1) % players.length;
+    let attempts = 0;
+    while (attempts < players.length) {
+      const player = players[nextPosition];
+      if (player && player.chips > 0) {
+        return nextPosition;
+      }
+      nextPosition = (nextPosition + 1) % players.length;
+      attempts++;
+    }
+    return -1;
+  }
+
   static getSmallBlindPosition(dealerPosition: number, players: Player[]): number {
-    const activePlayers = players.filter(p => p.isActive);
-    if (activePlayers.length === 2) return dealerPosition; // Heads-up: dealer is small blind
-    
-    return this.getNextActivePlayer(players, dealerPosition);
+    const eligiblePlayers = players.filter(p => p.chips > 0);
+    if (eligiblePlayers.length === 2) return dealerPosition; // Heads-up: dealer is SB
+    return this.getNextPlayerWithChips(players, dealerPosition);
   }
 
   static getBigBlindPosition(dealerPosition: number, players: Player[]): number {
-    const activePlayers = players.filter(p => p.isActive);
-    if (activePlayers.length === 2) {
-      return this.getNextActivePlayer(players, dealerPosition);
+    const eligiblePlayers = players.filter(p => p.chips > 0);
+    if (eligiblePlayers.length === 2) {
+      return this.getNextPlayerWithChips(players, dealerPosition);
     }
-    
     const smallBlindPos = this.getSmallBlindPosition(dealerPosition, players);
-    return this.getNextActivePlayer(players, smallBlindPos);
+    return this.getNextPlayerWithChips(players, smallBlindPos);
   }
 }

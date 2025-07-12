@@ -59,7 +59,7 @@ export class SocketHandler {
 
           // Get user info from database
           const [rows] = await pool.execute(
-            'SELECT username, full_name FROM users WHERE id = ?',
+            'SELECT username, full_name, profile_image FROM users WHERE id = ?',
             [socket.userId]
           );
 
@@ -71,7 +71,7 @@ export class SocketHandler {
           const user = (rows as any[])[0];
           const username = user.username || `User_${socket.userId.slice(-6)}`;
 
-          const success = this.gameManager.addPlayer(socket.userId, username);
+          const success = this.gameManager.addPlayer(socket.userId, username, user.profile_image);
           
           if (success) {
             socket.join(tableId);
@@ -101,13 +101,9 @@ export class SocketHandler {
           const success = this.gameManager.playerAction(socket.userId, action, amount);
           
           if (success) {
-            // Broadcast the action to all players
-            socket.rooms.forEach(room => {
-              if (room !== socket.id) {
-                this.io.to(room).emit('playerAction', socket.userId!, action, amount);
-                this.broadcastGameState(room);
-              }
-            });
+            // Broadcast the action to all players in the main table
+            this.io.to('main-table').emit('playerAction', socket.userId!, action, amount);
+            this.broadcastGameState('main-table');
           }
         } catch (error) {
           console.error('Error processing player action:', error);
@@ -131,6 +127,52 @@ export class SocketHandler {
           socket.leave('table');
         } catch (error) {
           console.error('Error leaving table:', error);
+        }
+      });
+
+      // Sit out event
+      socket.on('sitOut', () => {
+        try {
+          if (!socket.userId) return;
+
+          console.log(`User ${socket.userId} is sitting out`);
+          
+          // Mark player as sitting out (temporarily inactive)
+          const success = this.gameManager.sitOutPlayer(socket.userId);
+          
+          if (success) {
+            // Notify other players and update game state
+            socket.rooms.forEach(room => {
+              if (room !== socket.id) {
+                this.broadcastGameState(room);
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error sitting out:', error);
+        }
+      });
+
+      // Return to table event
+      socket.on('returnToTable', () => {
+        try {
+          if (!socket.userId) return;
+
+          console.log(`User ${socket.userId} is returning to table`);
+          
+          // Mark player as active again
+          const success = this.gameManager.returnPlayerToTable(socket.userId);
+          
+          if (success) {
+            // Notify other players and update game state
+            socket.rooms.forEach(room => {
+              if (room !== socket.id) {
+                this.broadcastGameState(room);
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error returning to table:', error);
         }
       });
 
@@ -167,5 +209,13 @@ export class SocketHandler {
 
   public getGameManager(): GameManager {
     return this.gameManager;
+  }
+
+  public broadcastPlayerAnnouncement(message: string): void {
+    this.io.to('main-table').emit('playerAnnouncement', message);
+  }
+
+  public broadcastPlayerAction(playerId: string, action: string, amount?: number): void {
+    this.io.to('main-table').emit('playerAction', playerId, action, amount);
   }
 }

@@ -509,3 +509,20 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     res.status(500).json({ message: 'Server error resetting password' });
   }
 };
+
+export const uploadProfileImage = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user.userId;
+    if (!req.file) {
+      res.status(400).json({ message: 'No file uploaded' });
+      return;
+    }
+    // Save the relative path to the DB
+    const imageUrl = `/uploads/profile-images/${req.file.filename}`;
+    await pool.execute('UPDATE users SET profile_image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [imageUrl, userId]);
+    res.json({ message: 'Profile image uploaded successfully', imageUrl });
+  } catch (error) {
+    console.error('Upload profile image error:', error);
+    res.status(500).json({ message: 'Server error uploading profile image' });
+  }
+};
